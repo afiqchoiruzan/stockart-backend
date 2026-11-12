@@ -7,7 +7,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-v18+-green.svg?logo=node.js)](https://nodejs.org/)
 [![Express.js](https://img.shields.io/badge/Express.js-v5-black.svg?logo=express)](https://expressjs.com/)
 [![MongoDB Atlas](https://img.shields.io/badge/MongoDB_Atlas-Database-forestgreen.svg?logo=mongodb)](https://www.mongodb.com/atlas)
-[![Railway](https://img.shields.io/badge/Railway-Deployed-0B0D0E.svg?logo=railway)](https://stockart-backend-production.up.railway.app)
+[![Railway](https://img.shields.io/badge/Railway-Deployed-0B0D0E.svg?logo=railway)](https://stockart-backend-production-5896718b.up.railway.app)
 [![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen.svg)]()
 
 ---
@@ -18,7 +18,7 @@ https://drive.google.com/drive/folders/1q-CFouyNM72jy04lbFyb3o5WhMakrGxF?usp=sha
 https://github.com/AfiqMir/stockart-backend
 
 3. Tautan Live Server Deployment (Railway):
-https://stockart-backend-production.up.railway.app
+https://stockart-backend-production-5896718b.up.railway.app
 
 4. Tautan Documenter Postman
 https://documenter.getpostman.com/view/42234832/2sBYB4M79y
@@ -133,9 +133,9 @@ Laporan lengkap Tugas Akhir Milestone 1 mencakup analisis kebutuhan sistem, spes
 Server backend telah berhasil di-deploy ke lingkungan produksi (PaaS Railway Cloud) dan aktif melayani request selama 24 jam nonstop:
 
 - **Base URL Server Produksi:**  
-  [`https://stockart-backend-production.up.railway.app`](https://stockart-backend-production.up.railway.app)
+  [`https://stockart-backend-production-5896718b.up.railway.app`](https://stockart-backend-production-5896718b.up.railway.app)
 - **Health Check Endpoint:**  
-  `GET https://stockart-backend-production.up.railway.app/`  
+  `GET https://stockart-backend-production-5896718b.up.railway.app/`  
   *(Mengembalikan status server aktif beserta tautan dokumentasi)*
 
 ---
