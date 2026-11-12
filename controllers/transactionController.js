@@ -1,5 +1,7 @@
 const Transaction = require('../models/Transaction');
+const Product = require('../models/Product');
 const service = require('../services/transactionService');
+const { sendLowStockAlertEmail } = require('../services/emailService');
 
 function sendError(res, error) {
   const status = error.statusCode || 500;
@@ -39,6 +41,22 @@ exports.createTransaction = async (req, res) => {
   try {
     const transaction = await service.checkout(req.body.detailBarang, req.user._id);
     res.status(201).json({ success: true, message: 'Checkout berhasil', data: transaction });
+
+    // Otomatis kirim email Alert Low Stock ke Owner jika produk yang dibeli menyentuh batas minimum
+    if (!process.env.NODE_TEST_CONTEXT && process.env.SMTP_USER && process.env.SMTP_PASS) {
+      const productIds = transaction.detailBarang.map((item) => item.produk);
+      Product.find({
+        _id: { $in: productIds },
+        aktif: true,
+        $expr: { $lte: ['$stok', '$stokMinimum'] },
+      })
+        .then((lowProducts) => {
+          if (lowProducts.length > 0) {
+            return sendLowStockAlertEmail(lowProducts);
+          }
+        })
+        .catch(() => {});
+    }
   } catch (error) { sendError(res, error); }
 };
 

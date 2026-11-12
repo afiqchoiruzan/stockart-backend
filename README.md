@@ -224,3 +224,149 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 
 > 💡 **File Pengujian Postman:**  
 > File koleksi lengkap telah disediakan pada berkas [`StockArt_API.postman_collection.json`](./StockArt_API.postman_collection.json). Koleksi ini telah dilengkapi dengan skrip *pre-request* dan *tests* otomatis untuk menyimpan dan meneruskan token JWT ke setiap request.
+
+---
+
+## 9. Alur Pengguna (*User Flow*)
+
+Aplikasi **StockArt** membagi alur pengguna berdasarkan peran (*Role-Based Access Control*): **Kasir** dan **Pemilik**. Diagram di bawah ini otomatis dirender secara visual oleh GitHub:
+
+### 9.1 Diagram Alur Utama (*Role & Access Flow*)
+
+```mermaid
+flowchart TD
+    Start(["🌐 Buka Aplikasi StockArt"]) --> Login["🔐 Halaman Login<br/>(Input Username & Password)"]
+    Login --> Auth{"Verifikasi JWT & Role"}
+
+    Auth -- "❌ Gagal / Tidak Valid" --> Err["⚠️ Tampilkan Pesan Error<br/>(Maks 10x percobaan / 15 menit)"]
+    Err --> Login
+
+    Auth -- "✅ Role: KASIR" --> KasirHome["🛒 Halaman Utama Kasir (POS)"]
+    Auth -- "✅ Role: PEMILIK" --> OwnerHome["📊 Dashboard Utama Pemilik"]
+
+    subgraph KasirFlow ["👩‍💼 Area Operasional Kasir"]
+        KasirHome --> K1["🔍 Cari / Scan Barcode Produk"]
+        KasirHome --> K2["🛍️ Buat Transaksi & Checkout"]
+        KasirHome --> K3["🧾 Riwayat & Void Transaksi"]
+        KasirHome --> K4["📦 Cek Stok & Stok Menipis"]
+    end
+
+    subgraph OwnerFlow ["👨‍💼 Area Manajemen Pemilik"]
+        OwnerHome --> O1["📈 Laporan Omzet & Grafik Tren"]
+        OwnerHome --> O2["🏆 Peringkat Produk Terlaris"]
+        OwnerHome --> O3["📦 CRUD Produk & Restock"]
+        OwnerHome --> O4["🗑️ Soft Delete & Restore Produk"]
+        OwnerHome --> O5["👤 Registrasi Akun Kasir Baru"]
+    end
+```
+
+---
+
+### 9.2 Diagram Alur Kasir (*Cashier Dashboard Flow*)
+
+```mermaid
+flowchart TD
+    Start(["👩‍💼 1. Kasir Buka Aplikasi"]) --> Login["🔐 Input Username & Password Kasir"]
+    Login --> Auth{"Verifikasi Login & Role"}
+
+    Auth -- "❌ Gagal" --> LoginErr["⚠️ Tampilkan Pesan Error Login"]
+    LoginErr --> Login
+
+    Auth -- "✅ Sukses (Role: Kasir)" --> Dashboard["🛒 Dashboard Utama Kasir"]
+
+    %% Cabang 3 Menu Utama di Dashboard Kasir
+    Dashboard --> MenuA["📦 2. Menu Produk"]
+    Dashboard --> MenuB["🛍️ 3. Menu Transaksi (POS)"]
+    Dashboard --> MenuC["🧾 4. Menu Riwayat Transaksi"]
+
+    %% Sub-alur Menu Produk
+    subgraph SubProdukKasir ["📦 2. Menu Produk (Read-Only)"]
+        MenuA --> ReadProd["📋 Read Daftar Katalog Produk<br/>(Nama, Kategori, Harga, Sisa Stok)"]
+        ReadProd --> SearchStok["🔍 Search Produk & Cek Ketersediaan Stok<br/>(Nama / Kategori / Scan Barcode)"]
+    end
+
+    %% Sub-alur Menu Transaksi
+    subgraph SubTransaksiKasir ["🛍️ 3. Menu Transaksi (Checkout Flow)"]
+        MenuB --> BuatTx["➕ Buat Transaksi Baru<br/>(Pilih Barang & Input Jumlah Beli)"]
+        BuatTx --> CekStok{"Stok Cukup?"}
+        CekStok -- "❌ Tidak" --> AlertStok["⚠️ Peringatan Stok Tidak Cukup"] --> BuatTx
+        CekStok -- "✅ Ya" --> Payment["💵 Proses Payment<br/>(Input Nominal Bayar & Hitung Kembalian)"]
+        Payment --> Checkout["⚡ Simpan Transaksi & Potong Stok Atomik"]
+        Checkout --> Invoice(["🧾 Terbitkan & Cetak Invoice / Struk"])
+    end
+
+    %% Sub-alur Menu Riwayat Transaksi
+    subgraph SubRiwayatKasir ["🧾 4. Menu Riwayat Transaksi"]
+        MenuC --> ListRiwayat["📋 Lihat Daftar Riwayat Transaksi"]
+        ListRiwayat --> FilterTgl["📅 Filter Berdasarkan Tanggal / Status"]
+        FilterTgl --> DetailInvoice["🔍 Lihat Detail Invoice Transaksi"]
+    end
+```
+
+1. **Login Kasir:** Kasir masuk menggunakan akun kasir (`POST /api/auth/login`) dan diarahkan ke **Dashboard Kasir**.
+2. **Menu Produk (*Read & Search Stok*):**
+   - Melihat daftar katalog produk secara *read-only* tanpa akses ubah/hapus (`GET /api/products`).
+   - Mencari barang (berdasarkan nama, kategori, atau barcode) untuk mengecek ketersediaan stok secara cepat.
+3. **Menu Transaksi (*Payment & Invoice*):**
+   - **Membuat Transaksi:** Memilih barang ke keranjang belanja dan memvalidasi kecukupan stok.
+   - **Payment:** Memasukkan nominal pembayaran pelanggan, menghitung kembalian otomatis, dan mengeksekusi checkout atomik (`POST /api/transactions/checkout`).
+   - **Invoice:** Menghasilkan dan menampilkan struk/invoice transaksi yang siap dicetak.
+4. **Menu Riwayat Transaksi:**
+   - Menampilkan daftar riwayat transaksi yang telah diproses (`GET /api/transactions`) beserta rincian invoice tiap transaksi (`GET /api/transactions/:id`).
+
+---
+
+### 9.3 Diagram Alur Pemilik Toko (*Owner Dashboard Flow*)
+
+```mermaid
+flowchart TD
+    Start(["👨‍💼 1. Owner Buka Aplikasi"]) --> Login["🔐 Input Username & Password Owner"]
+    Login --> Auth{"Verifikasi Login & Role"}
+
+    Auth -- "❌ Gagal" --> LoginErr["⚠️ Tampilkan Pesan Error Login"]
+    LoginErr --> Login
+
+    Auth -- "✅ 2. Sukses (Role: Pemilik)" --> Dashboard["🏠 Dashboard Utama Owner"]
+
+    %% Cabang 3 Menu Utama di Dashboard Owner
+    Dashboard --> MenuA["📦 A. Menu Produk"]
+    Dashboard --> MenuB["🧾 B. Menu Transaksi"]
+    Dashboard --> MenuC["📊 C. Menu Laporan"]
+
+    %% Sub-alur Menu A: Produk
+    subgraph SubProduk ["📦 Manajemen Produk & Stok"]
+        MenuA --> ProdList["Lihat Daftar Produk<br/>(Nama, Kategori, Harga, Stok)"]
+        ProdList --> ProdEdit["✏️ Edit Data Produk<br/>(Ubah Nama, Kategori, Harga, Stok, Tambah/Hapus)"]
+        ProdEdit --> CekStok{"Stok <= Batas Minimum?"}
+        CekStok -- "✅ Aman" --> ProdSaved["💾 Simpan Perubahan di Database"]
+        CekStok -- "⚠️ Low Stock!" --> AlertEmail["📧 Kirim Alert Low Stock<br/>Otomatis ke Email Owner"]
+        AlertEmail --> ProdSaved
+    end
+
+    %% Sub-alur Menu B: Transaksi
+    subgraph SubTransaksi ["🧾 Monitoring Transaksi Kasir"]
+        MenuB --> FilterKasir["👤 Pilih / Filter Berdasarkan Kasir"]
+        FilterKasir --> RiwayatTx["📋 Lihat Riwayat Transaksi Masing-Masing Kasir"]
+        RiwayatTx --> DetailTx["🔍 Lihat Detail Struk Transaksi<br/>(Item, Kuantitas, Waktu, Total, Status)"]
+    end
+
+    %% Sub-alur Menu C: Laporan
+    subgraph SubLaporan ["📊 Laporan Keuangan & Otomasi Cloud"]
+        MenuC --> FilterWaktu["📅 Pilih Filter Waktu<br/>(Harian / Mingguan / Bulanan)"]
+        FilterWaktu --> JenisReport["📈 Generate Laporan:<br/>1. Laporan Keuangan (Omzet & Laba)<br/>2. Produk Terjual & Barang Masuk"]
+        JenisReport --> AutoExport["⚡ Otomasi Pengiriman & Backup Laporan"]
+        AutoExport --> SendEmail["📧 Otomatis Kirim ke Email Owner"]
+        AutoExport --> SaveDrive["☁️ Otomatis Simpan ke Google Drive Owner"]
+    end
+```
+
+1. **Login Owner:** Pemilik masuk menggunakan kredensial khusus `pemilik` (`POST /api/auth/login`). Jika terverifikasi, sistem mengarahkan ke **Dashboard Owner**.
+2. **A. Menu Produk:**
+   - Menampilkan dan mengedit seluruh atribut produk meliputi **Nama, Kategori, Harga, dan Stok** (`POST / PUT / PATCH / DELETE /api/products`).
+   - Memantau ketersediaan stok barang (`GET /api/products/low-stock`) dan mengirimkan **notifikasi *Alert Low Stock* otomatis ke Email Owner** saat stok menyentuh atau berada di bawah batas minimum.
+3. **B. Menu Transaksi:**
+   - Memantau **riwayat transaksi dari masing-masing kasir** (`GET /api/transactions?kasir=<id>`) beserta rincian struk belanja per transaksi (`GET /api/transactions/:id`).
+4. **C. Menu Laporan:**
+   - Menyajikan laporan **Harian (*Daily*), Mingguan (*Weekly*), dan Bulanan (*Monthly*)** untuk **Keuangan (Omzet)** serta **Produk yang Terjual dan Barang Masuk** (`GET /api/reports/summary`, `/revenue`, `/top-products`).
+   - Dilengkapi **Filter Waktu** (Hari, Minggu, Bulan) serta fitur **otomatis kirim laporan ke Email Owner dan simpan ke Google Drive Owner**.
+
