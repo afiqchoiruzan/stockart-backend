@@ -1,5 +1,6 @@
 # Folder dependency/library Node.js (di-download otomatis via npm install)
 node_modules/
+CLAUDE.md
 
 # File konfigurasi rahasia (berisi PORT, MONGO_URI, JWT_SECRET)
 .env
