@@ -138,6 +138,17 @@ exports.createProduct = async (req, res) => {
       message: 'Produk berhasil ditambahkan',
       data: product,
     });
+
+    // Otomatis kirim email Alert Low Stock jika produk baru memiliki stok <= batas minimum
+    if (
+      !process.env.NODE_TEST_CONTEXT &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS &&
+      product.aktif &&
+      product.stok <= product.stokMinimum
+    ) {
+      sendLowStockAlertEmail([product]).catch(() => {});
+    }
   } catch (error) {
     res.status(400).json({
       success: false,
@@ -276,6 +287,17 @@ exports.restockProduct = async (req, res) => {
       message: 'Stok berhasil ditambahkan',
       data: product,
     });
+
+    // Otomatis kirim email jika setelah restock ternyata stok masih di bawah batas minimum
+    if (
+      !process.env.NODE_TEST_CONTEXT &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS &&
+      product.aktif &&
+      product.stok <= product.stokMinimum
+    ) {
+      sendLowStockAlertEmail([product]).catch(() => {});
+    }
   } catch (error) {
     res.status(400).json({
       success: false,
