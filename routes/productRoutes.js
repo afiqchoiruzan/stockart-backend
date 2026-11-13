@@ -4,6 +4,7 @@ const router = express.Router();
 const {
   getProducts,
   getLowStockProducts,
+  notifyLowStockProducts,
   getProductById,
   createProduct,
   updateProduct,
@@ -18,6 +19,7 @@ const { validate, productRules, productUpdateRules, restockRules } = require('..
 // Owner dan cashier dapat melihat produk
 router.get('/', protect, getProducts);
 router.get('/low-stock', protect, getLowStockProducts);
+router.post('/low-stock/notify', protect, authorize('pemilik'), notifyLowStockProducts);
 router.get('/:id', protect, getProductById);
 
 // Hanya owner yang dapat mengelola produk

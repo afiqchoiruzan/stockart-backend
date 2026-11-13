@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const { sendLowStockAlertEmail } = require('../services/emailService');
 
 // GET /api/products
 exports.getProducts = async (req, res) => {
@@ -66,6 +67,43 @@ exports.getLowStockProducts = async (req, res) => {
   }
 };
 
+// POST /api/products/low-stock/notify
+exports.notifyLowStockProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      aktif: true,
+      $expr: { $lte: ['$stok', '$stokMinimum'] }
+    }).sort({ stok: 1 });
+
+    if (products.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'Seluruh stok produk dalam kondisi aman (tidak ada yang menipis)',
+        data: { sent: false, count: 0 },
+      });
+    }
+
+    const emailResult = await sendLowStockAlertEmail(products, req.body?.email);
+
+    res.status(200).json({
+      success: true,
+      message: `Notifikasi peringatan ${products.length} produk stok menipis berhasil dikirim ke email owner (${emailResult.to})`,
+      data: {
+        sent: true,
+        count: products.length,
+        recipient: emailResult.to,
+        products,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Gagal mengirim email peringatan stok menipis',
+      error: error.message,
+    });
+  }
+};
+
 // GET /api/products/:id
 exports.getProductById = async (req, res) => {
   try {
@@ -100,6 +138,17 @@ exports.createProduct = async (req, res) => {
       message: 'Produk berhasil ditambahkan',
       data: product,
     });
+
+    // Otomatis kirim email Alert Low Stock jika produk baru memiliki stok <= batas minimum
+    if (
+      !process.env.NODE_TEST_CONTEXT &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS &&
+      product.aktif &&
+      product.stok <= product.stokMinimum
+    ) {
+      sendLowStockAlertEmail([product]).catch(() => {});
+    }
   } catch (error) {
     res.status(400).json({
       success: false,
@@ -133,6 +182,17 @@ exports.updateProduct = async (req, res) => {
       message: 'Produk berhasil diperbarui',
       data: product,
     });
+
+    // Otomatis kirim email Alert Low Stock jika stok produk <= batas minimum
+    if (
+      !process.env.NODE_TEST_CONTEXT &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS &&
+      product.aktif &&
+      product.stok <= product.stokMinimum
+    ) {
+      sendLowStockAlertEmail([product]).catch(() => {});
+    }
   } catch (error) {
     res.status(400).json({
       success: false,
@@ -227,6 +287,17 @@ exports.restockProduct = async (req, res) => {
       message: 'Stok berhasil ditambahkan',
       data: product,
     });
+
+    // Otomatis kirim email jika setelah restock ternyata stok masih di bawah batas minimum
+    if (
+      !process.env.NODE_TEST_CONTEXT &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS &&
+      product.aktif &&
+      product.stok <= product.stokMinimum
+    ) {
+      sendLowStockAlertEmail([product]).catch(() => {});
+    }
   } catch (error) {
     res.status(400).json({
       success: false,
