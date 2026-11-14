@@ -20,6 +20,7 @@ dotenv.config();
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const connectDB = require('../config/db');
 const User = require('../models/User');
 
 const PEMILIK_NAMA = process.env.PEMILIK_NAMA || 'Pemilik Toko';
@@ -27,8 +28,7 @@ const PEMILIK_USERNAME = process.env.PEMILIK_USERNAME || 'pemilik';
 const PEMILIK_PASSWORD = process.env.PEMILIK_PASSWORD || 'gantidulu123';
 
 async function seed() {
-  await mongoose.connect(process.env.MONGO_URI);
-  console.log('MongoDB connected.');
+  await connectDB();
 
   const existing = await User.findOne({ username: PEMILIK_USERNAME });
 

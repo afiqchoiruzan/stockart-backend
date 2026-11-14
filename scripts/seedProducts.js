@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const mongoose = require('mongoose');
+const connectDB = require('../config/db');
 const Product = require('../models/Product');
 
 const products = [
@@ -70,8 +71,7 @@ const products = [
 
 async function seedProducts() {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('MongoDB connected.');
+    await connectDB();
 
     await Product.deleteMany({});
     console.log('Tabel Product lama dikosongkan.');
