@@ -88,7 +88,8 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
     });
     assert.equal(EMOJI_REGEX.test(headerHtml), false, 'Header masih mengandung emoji');
     assert.equal(/linear-gradient/i.test(headerHtml), false, 'Header tidak boleh memakai linear-gradient');
-    assert.match(headerHtml, /Toko Kelontong "Berkah"/);
+    assert.match(headerHtml, /Stockart/);
+    assert.equal(/Berkah/i.test(headerHtml), false, 'Nama Toko Berkah harus diganti Stockart');
     assert.match(headerHtml, /Peringatan Stok Produk Menipis/);
     assert.equal(/Peringatan Stok Habis &amp;? Menipis/i.test(headerHtml), false);
     assert.equal(/Waktu Deteksi/i.test(headerHtml), false, 'Tulisan Waktu Deteksi harus dihilangkan');
@@ -122,6 +123,8 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
     assert.equal(/Kopi sachet 10s/i.test(bodyHtml), false, 'Deskripsi produk harus dihilangkan');
     assert.equal(/Kurang \d+/i.test(bodyHtml), false, 'Tulisan Kurang pada sisa stok harus dihilangkan');
     assert.equal(/Estimasi Pengadaan Ulang/i.test(bodyHtml), false, 'Bagian Estimasi Pengadaan Ulang harus dihilangkan');
+    assert.equal(/Berkah/i.test(bodyHtml), false, 'Nama Toko Berkah di body harus diganti Stockart');
+    assert.match(bodyHtml, /Owner Stockart/);
 
     // Kolom & data utama tetap tampil bersih
     assert.match(bodyHtml, /SM002/);

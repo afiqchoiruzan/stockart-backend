@@ -230,7 +230,7 @@ function buildLowStockEmailHeader(products, { wibDateTime, isCritical, habisCoun
         </tr>
       </table>
       <div style="font-size:12px; font-weight:700; color:#000000; margin-bottom:4px;">
-        Toko Kelontong "Berkah"
+        Stockart
       </div>
       <h1 style="margin:0 0 6px; font-size:22px; font-weight:700; color:#000000; letter-spacing:-0.02em; line-height:1.25;">
         Peringatan Stok Produk Menipis
@@ -318,7 +318,7 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
   return `
     <div style="padding:24px; background:#FFFFFF; color:#171717;">
       <p style="font-size:14px; margin:0 0 8px; color:#000000; line-height:1.5;">
-        Halo <strong>Owner Toko Berkah</strong>,
+        Halo <strong>Owner Stockart</strong>,
       </p>
       <p style="font-size:13px; line-height:1.6; color:#404040; margin:0 0 20px;">
         Berikut ringkasan produk aktif pada katalog <strong>StockArt POS</strong> yang perlu segera diperhatikan pada pengecekan <strong>${wibDateTime}</strong>:
