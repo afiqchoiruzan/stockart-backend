@@ -233,16 +233,16 @@ function buildLowStockEmailHeader(products, { wibDateTime, isCritical, habisCoun
         Toko Kelontong "Berkah"
       </div>
       <h1 style="margin:0 0 6px; font-size:22px; font-weight:700; color:#000000; letter-spacing:-0.02em; line-height:1.25;">
-        ${isCritical ? 'Peringatan Stok Habis & Menipis' : 'Peringatan Stok Produk Menipis'}
+        Peringatan Stok Produk Menipis
       </h1>
       <p style="margin:0; font-size:12px; color:#525252; line-height:1.5;">
-        Waktu Deteksi: <strong style="color:#171717;">${wibDateTime}</strong>
+        <strong style="color:#171717;">${wibDateTime}</strong>
       </p>
     </div>`;
 }
 
 /**
- * Membangun Body Email (Ringkasan KPI & Tabel Produk sesuai skema models/Product.js)
+ * Membangun Body Email (Tabel Rincian Produk sesuai skema models/Product.js)
  * dengan palet monokrom bersih dan warna merah khusus untuk penanda item low stock.
  */
 function buildLowStockEmailBody(products, { to, wibDateTime }) {
@@ -250,20 +250,6 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
 
   // Urutkan item dari stok terkecil (stok 0 paling atas)
   items.sort((a, b) => Number(a.stok || 0) - Number(b.stok || 0));
-
-  const habisCount = items.filter((p) => Number(p.stok) <= 0).length;
-  const menipisCount = items.filter(
-    (p) => Number(p.stok) > 0 && Number(p.stok) <= Number(p.stokMinimum ?? 0)
-  ).length;
-  const totalItems = items.length;
-
-  // Hitung perkiraan modal restock: sum((stokMinimum - stok) * hargaBeli)
-  let estimasiModalRestock = 0;
-  items.forEach((p) => {
-    const targetRestock = Math.max(0, Number(p.stokMinimum ?? 0) - Number(p.stok || 0));
-    const hargaBeli = Number(p.hargaBeli || 0);
-    estimasiModalRestock += targetRestock * hargaBeli;
-  });
 
   const frontendBase = (process.env.CORS_ORIGIN || 'http://localhost:3000')
     .split(',')[0]
@@ -278,7 +264,6 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
       const isHabis = stokNum <= 0;
       const isMenipis = !isHabis && stokNum <= minNum;
       const isLow = isHabis || isMenipis;
-      const deficit = Math.max(0, minNum - stokNum);
       const satuan = p.satuan || 'pcs';
       const kode = p.kodeProduk || `PRD-${idx + 1}`;
       const kategori = p.kategori || 'Umum';
@@ -309,13 +294,11 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
             <strong style="color:#000000;">${p.nama}</strong>
             <div style="font-size:11px; color:#525252; margin-top:3px;">
               <span>${kategori}</span>
-              ${p.deskripsi ? ` &middot; <span>${p.deskripsi}</span>` : ''}
             </div>
           </td>
           <td style="padding:12px 10px; border-bottom:1px solid #E5E5E5; font-size:13px; text-align:center; font-variant-numeric:tabular-nums;">
             <strong style="color:${stokColor}; font-size:14px;">${stokNum}</strong>
             <span style="font-size:11px; color:#525252; margin-left:2px;">${satuan}</span>
-            ${isLow && deficit > 0 ? `<div style="font-size:10px; color:#991B1B; margin-top:2px;">Kurang ${deficit} ${satuan}</div>` : ''}
           </td>
           <td style="padding:12px 10px; border-bottom:1px solid #E5E5E5; font-size:12px; text-align:center; color:#404040; font-variant-numeric:tabular-nums;">
             <strong>${minNum}</strong>
@@ -332,18 +315,6 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
     })
     .join('');
 
-  const habisCardStyle = habisCount > 0
-    ? 'background:#FEF2F2; border:1px solid #FCA5A5;'
-    : 'background:#FAFAFA; border:1px solid #E5E5E5;';
-  const habisLabelColor = habisCount > 0 ? '#991B1B' : '#525252';
-  const habisValueColor = habisCount > 0 ? '#DC2626' : '#171717';
-
-  const menipisCardStyle = menipisCount > 0
-    ? 'background:#FEF2F2; border:1px solid #FCA5A5;'
-    : 'background:#FAFAFA; border:1px solid #E5E5E5;';
-  const menipisLabelColor = menipisCount > 0 ? '#991B1B' : '#525252';
-  const menipisValueColor = menipisCount > 0 ? '#DC2626' : '#171717';
-
   return `
     <div style="padding:24px; background:#FFFFFF; color:#171717;">
       <p style="font-size:14px; margin:0 0 8px; color:#000000; line-height:1.5;">
@@ -352,24 +323,6 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
       <p style="font-size:13px; line-height:1.6; color:#404040; margin:0 0 20px;">
         Berikut ringkasan produk aktif pada katalog <strong>StockArt POS</strong> yang perlu segera diperhatikan pada pengecekan <strong>${wibDateTime}</strong>:
       </p>
-
-      <!-- KPI Summary Cards -->
-      <table role="presentation" style="width:100%; border-collapse:separate; border-spacing:8px 0; margin:0 -8px 22px;">
-        <tr>
-          <td style="width:33.33%; background:#FAFAFA; border:1px solid #E5E5E5; border-radius:6px; padding:12px 14px; text-align:center;">
-            <div style="font-size:10px; font-weight:700; color:#525252; text-transform:uppercase; letter-spacing:0.06em;">TOTAL TERDAMPAK</div>
-            <div style="font-size:22px; font-weight:700; color:#000000; margin-top:4px; font-variant-numeric:tabular-nums;">${totalItems} <span style="font-size:12px; font-weight:500; color:#525252;">Produk</span></div>
-          </td>
-          <td style="width:33.33%; ${habisCardStyle} border-radius:6px; padding:12px 14px; text-align:center;">
-            <div style="font-size:10px; font-weight:700; color:${habisLabelColor}; text-transform:uppercase; letter-spacing:0.06em;">STOK HABIS (0)</div>
-            <div style="font-size:22px; font-weight:700; color:${habisValueColor}; margin-top:4px; font-variant-numeric:tabular-nums;">${habisCount} <span style="font-size:12px; font-weight:500;">Produk</span></div>
-          </td>
-          <td style="width:33.33%; ${menipisCardStyle} border-radius:6px; padding:12px 14px; text-align:center;">
-            <div style="font-size:10px; font-weight:700; color:${menipisLabelColor}; text-transform:uppercase; letter-spacing:0.06em;">STOK MENIPIS</div>
-            <div style="font-size:22px; font-weight:700; color:${menipisValueColor}; margin-top:4px; font-variant-numeric:tabular-nums;">${menipisCount} <span style="font-size:12px; font-weight:500;">Produk</span></div>
-          </td>
-        </tr>
-      </table>
 
       <!-- Tabel Rincian Produk Sesuai Skema Backend -->
       <div style="border:1px solid #D4D4D4; border-radius:6px; overflow:hidden; background:#FFFFFF; margin-bottom:20px;">
@@ -389,17 +342,6 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
             ${tableRows}
           </tbody>
         </table>
-      </div>
-
-      <!-- Ringkasan Modal Pengadaan Ulang -->
-      <div style="background:#FAFAFA; border:1px solid #E5E5E5; border-left:3px solid #000000; border-radius:4px; padding:14px 16px; margin-bottom:20px;">
-        <div style="font-size:12px; font-weight:700; color:#000000; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.04em;">
-          Estimasi Pengadaan Ulang
-        </div>
-        <div style="font-size:12px; line-height:1.6; color:#404040;">
-          Perkiraan modal beli untuk mengembalikan seluruh produk di atas ke batas minimum adalah <strong style="color:#000000;">${formatRp(estimasiModalRestock)}</strong>.
-          Segera lakukan restock melalui halaman Manajemen Produk agar operasional kasir tetap lancar.
-        </div>
       </div>
 
       <!-- Action Button / CTA -->

@@ -79,7 +79,7 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
     assert.match(subjectWarning, /1 Produk Stok Menipis/);
   });
 
-  await t.test('Header email monokrom tanpa emoji atau gradien dengan penanda merah status low stock', () => {
+  await t.test('Header email selalu berjudul Peringatan Stok Produk Menipis + tanggal tanpa teks Waktu Deteksi', () => {
     const headerHtml = buildLowStockEmailHeader(sampleProducts, {
       wibDateTime: 'Kamis, 12 November 2026, 20:55 WIB',
       isCritical: true,
@@ -89,6 +89,9 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
     assert.equal(EMOJI_REGEX.test(headerHtml), false, 'Header masih mengandung emoji');
     assert.equal(/linear-gradient/i.test(headerHtml), false, 'Header tidak boleh memakai linear-gradient');
     assert.match(headerHtml, /Toko Kelontong "Berkah"/);
+    assert.match(headerHtml, /Peringatan Stok Produk Menipis/);
+    assert.equal(/Peringatan Stok Habis &amp;? Menipis/i.test(headerHtml), false);
+    assert.equal(/Waktu Deteksi/i.test(headerHtml), false, 'Tulisan Waktu Deteksi harus dihilangkan');
     assert.match(headerHtml, /STATUS: STOK HABIS \(KRITIS\)/);
     assert.match(headerHtml, /Kamis, 12 November 2026, 20:55 WIB/);
 
@@ -102,7 +105,7 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
     }
   });
 
-  await t.test('Body email monokrom tanpa emoji, memuat seluruh field Product, dan hanya memakai merah pada penanda low stock', () => {
+  await t.test('Body email bersih tanpa KPI cards, tanpa deskripsi produk, tanpa teks Kurang, dan tanpa Estimasi Pengadaan Ulang', () => {
     const bodyHtml = buildLowStockEmailBody(sampleProducts, {
       to: 'owner@test.com',
       wibDateTime: 'Kamis, 12 November 2026, 20:55 WIB',
@@ -111,22 +114,27 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
     assert.equal(EMOJI_REGEX.test(bodyHtml), false, 'Body masih mengandung emoji');
     assert.equal(/linear-gradient/i.test(bodyHtml), false, 'Body tidak boleh memakai linear-gradient');
 
-    // Ringkasan KPI
-    assert.match(bodyHtml, /TOTAL TERDAMPAK/);
-    assert.match(bodyHtml, /STOK HABIS \(0\)/);
-    assert.match(bodyHtml, /STOK MENIPIS/);
+    // Bagian yang diminta user untuk dihilangkan
+    assert.equal(/TOTAL TERDAMPAK/i.test(bodyHtml), false, 'TOTAL TERDAMPAK harus dihilangkan');
+    assert.equal(/STOK HABIS \(0\)/i.test(bodyHtml), false, 'Kartu STOK HABIS harus dihilangkan');
+    assert.equal(/STOK MENIPIS/i.test(bodyHtml), false, 'Kartu STOK MENIPIS harus dihilangkan');
+    assert.equal(/Minyak kelapa sawit/i.test(bodyHtml), false, 'Deskripsi produk harus dihilangkan');
+    assert.equal(/Kopi sachet 10s/i.test(bodyHtml), false, 'Deskripsi produk harus dihilangkan');
+    assert.equal(/Kurang \d+/i.test(bodyHtml), false, 'Tulisan Kurang pada sisa stok harus dihilangkan');
+    assert.equal(/Estimasi Pengadaan Ulang/i.test(bodyHtml), false, 'Bagian Estimasi Pengadaan Ulang harus dihilangkan');
 
-    // Dokumen produk
+    // Kolom & data utama tetap tampil bersih
     assert.match(bodyHtml, /SM002/);
     assert.match(bodyHtml, /Minyak Goreng Bimoli 2L/);
+    assert.match(bodyHtml, /Sembako/);
     assert.match(bodyHtml, /pouch/);
     assert.match(bodyHtml, /HABIS \(0\)/);
     assert.match(bodyHtml, /MN005/);
     assert.match(bodyHtml, /Kopi Kapal Api Mix/);
+    assert.match(bodyHtml, /Minuman/);
     assert.match(bodyHtml, /renteng/);
     assert.match(bodyHtml, /MENIPIS/);
     assert.match(bodyHtml, /Rp 35\.000/);
-    assert.match(bodyHtml, /Rp 211\.000/); // (5-0)*35000 + (5-2)*12000 = 175000 + 36000
     assert.match(bodyHtml, /owner@test\.com/);
 
     // Pastikan seluruh warna hex hanya monokrom atau merah penanda low stock
