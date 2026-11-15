@@ -58,32 +58,47 @@ stockart-backend/
 ├── config/
 │   └── db.js                    # Konfigurasi koneksi database MongoDB Atlas via Mongoose
 ├── controllers/
-│   ├── authController.js        # Logika login, registrasi kasir terotorisasi, dan get current user profile
-│   ├── productController.js     # Logika CRUD produk, restock, low-stock, pencarian barcode, dan soft-delete
-│   ├── reportController.js      # Pipeline agregasi laporan omzet harian, summary, dan produk terlaris
-│   └── transactionController.js # Handler checkout transaksi, riwayat transaksi kasir/pemilik, dan void struk
+│   ├── authController.js         # Logika login, registrasi kasir terotorisasi, dan get current user profile
+│   ├── notificationController.js # Handler pengaturan jadwal notifikasi low stock (GET/PUT settings)
+│   ├── productController.js      # Logika CRUD produk, restock, low-stock, trigger manual alert, dan soft-delete
+│   ├── reportController.js       # Pipeline agregasi laporan omzet harian, summary, dan produk terlaris
+│   └── transactionController.js  # Handler checkout transaksi, alert kritis stok habis, riwayat, dan void struk
 ├── middleware/
-│   ├── authMiddleware.js        # Middleware verifikasi token JWT (protect) dan hak akses peran (authorize)
-│   ├── rateLimiter.js           # Middleware pencegah serangan brute-force pada endpoint autentikasi
-│   └── validate.js              # Middleware validasi skema dan sanitasi body request sebelum ke controller
+│   ├── authMiddleware.js         # Middleware verifikasi token JWT (protect) dan hak akses peran (authorize)
+│   ├── rateLimiter.js            # Middleware pencegah serangan brute-force pada endpoint autentikasi
+│   └── validate.js               # Middleware validasi skema dan sanitasi body request sebelum ke controller
 ├── models/
-│   ├── Product.js               # Mongoose schema produk (stok, harga beli/jual, barcode, status aktif)
-│   ├── Transaction.js           # Mongoose schema transaksi (daftar item, total, nominal bayar, kembalian, status)
-│   └── User.js                  # Mongoose schema pengguna toko (nama, username, password ter-hash, role)
+│   ├── NotificationSetting.js    # Mongoose schema jadwal digest low-stock, status eksekusi, dan alert kritis
+│   ├── Product.js                # Mongoose schema produk (stok, harga beli/jual, barcode, status aktif, stokHabisNotifiedAt)
+│   ├── Transaction.js            # Mongoose schema transaksi (daftar item, total, nominal bayar, kembalian, status)
+│   └── User.js                   # Mongoose schema pengguna toko (nama, username, password ter-hash, role)
 ├── routes/
-│   ├── authRoutes.js            # Routing endpoint otentikasi (/api/auth)
-│   ├── productRoutes.js         # Routing endpoint katalog produk (/api/products)
-│   ├── reportRoutes.js          # Routing endpoint analisis & pelaporan bisnis (/api/reports)
-│   └── transactionRoutes.js     # Routing endpoint kasir & checkout (/api/transactions)
+│   ├── authRoutes.js             # Routing endpoint otentikasi (/api/auth)
+│   ├── notificationRoutes.js     # Routing endpoint pengaturan notifikasi (/api/notifications)
+│   ├── productRoutes.js          # Routing endpoint katalog produk (/api/products)
+│   ├── reportRoutes.js           # Routing endpoint analisis & pelaporan bisnis (/api/reports)
+│   └── transactionRoutes.js      # Routing endpoint kasir & checkout (/api/transactions)
 ├── scripts/
-│   ├── seed.js                  # Script inisialisasi akun pemilik default (idempotent / aman dijalankan ulang)
-│   └── seedProducts.js          # Script pengisian 30+ data sampel produk toko kelontong (sembako, dsb.)
+│   ├── seed.js                   # Script inisialisasi akun pemilik default (idempotent / aman dijalankan ulang)
+│   └── seedProducts.js           # Script pengisian 30+ data sampel produk toko kelontong (sembako, dsb.)
 ├── services/
-│   └── transactionService.js    # Business logic transaksi atomik MongoDB session (checkout & void with rollback)
+│   ├── emailService.js           # Layanan pengiriman email (Brevo HTTP API & Nodemailer SMTP) termasuk template digest/kritis
+│   ├── lowStockAlertService.js   # Trigger 1x alert kritis saat checkout membuat stok = 0 & reset flag saat restock/void
+│   ├── lowStockDigestService.js  # Scheduler persistent rekap low-stock terjadwal (atomic lock, catch-up, retry)
+│   ├── lowStockSchedule.js       # Kalkulator slot jadwal WIB UTC+7 (off, daily, weekly, monthly)
+│   ├── lowStockSettingsService.js# Baca, validasi, dan update pengaturan notifikasi di MongoDB
+│   └── transactionService.js     # Business logic transaksi atomik MongoDB session (checkout & void with rollback)
 ├── test/
-│   ├── http.test.js             # HTTP Integration test komprehensif seluruh endpoint (Auth, RBAC, CRUD, Report)
-│   ├── rbac.test.js             # Unit test fungsional middleware otorisasi RBAC (pemilik vs kasir)
-│   └── transaction.test.js      # Unit test transaksi atomik, rollback, void, dan pemotongan stok
+│   ├── criticalAlert.test.js     # E2E test alert kritis stok = 0, reset flag saat restock/update/void
+│   ├── email.test.js             # Unit test penyusunan subjek & isi email digest, kritis, dan manual
+│   ├── http.test.js              # HTTP Integration test endpoint utama (Auth, RBAC, CRUD, Report)
+│   ├── lowStockDigest.test.js    # Test scheduler digest (atomic claim, anti-duplikat restart, retry, skip)
+│   ├── lowStockSchedule.test.js  # Unit test kalkulasi jadwal WIB UTC+7 (daily, weekly, monthly, off)
+│   ├── lowStockSettings.test.js  # Test persistensi & validasi pengaturan notifikasi di MongoDB
+│   ├── notificationRoutes.test.js# HTTP + RBAC test GET/PUT /api/notifications/low-stock/settings
+│   ├── product.test.js           # Integration test controller produk (CRUD, restock, trigger manual low-stock)
+│   ├── rbac.test.js              # Unit test fungsional middleware otorisasi RBAC (pemilik vs kasir)
+│   └── transaction.test.js       # Unit test transaksi atomik, rollback, void, dan pemotongan stok
 ├── .env.example                 # Template variabel lingkungan (Environment Variables)
 ├── .gitignore                   # Daftar file dan direktori yang diabaikan oleh Git
 ├── API_TESTING.md               # Panduan pengujian manual API menggunakan cURL
@@ -208,12 +223,15 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 | | `GET` | `/api/auth/me` | Kasir / Pemilik | Mendapatkan profil akun yang sedang login |
 | **Produk** | `GET` | `/api/products` | Kasir / Pemilik | Katalog produk aktif (dukung search, kategori, barcode) |
 | | `GET` | `/api/products/low-stock` | Kasir / Pemilik | Daftar produk dengan stok di bawah batas minimum |
+| | `POST` | `/api/products/low-stock/notify` | Pemilik | Kirim rekap email low-stock secara manual ke email pemilik |
 | | `GET` | `/api/products/:id` | Kasir / Pemilik | Detail produk berdasarkan ID |
 | | `POST` | `/api/products` | Pemilik | Menambahkan produk baru |
 | | `PUT` | `/api/products/:id` | Pemilik | Memperbarui informasi produk |
 | | `PATCH` | `/api/products/:id/restock` | Pemilik | Menambah jumlah stok barang masuk |
 | | `DELETE` | `/api/products/:id` | Pemilik | Menonaktifkan produk (*soft delete*) / hapus permanen (`?permanent=true`) |
 | | `PATCH` | `/api/products/:id/restore` | Pemilik | Mengaktifkan kembali produk yang dinonaktifkan |
+| **Notifikasi** | `GET` | `/api/notifications/low-stock/settings` | Pemilik | Melihat jadwal digest low-stock & status eksekusi terakhir |
+| | `PUT` | `/api/notifications/low-stock/settings` | Pemilik | Mengatur jadwal digest (`off`/`daily`/`weekly`/`monthly`) & alert kritis `stok = 0` |
 | **Transaksi**| `POST` | `/api/transactions/checkout`| Kasir / Pemilik | Checkout transaksi penjualan & pemotongan stok atomik |
 | | `GET` | `/api/transactions` | Kasir / Pemilik | Riwayat transaksi (filter tanggal WIB, status, kasir) |
 | | `GET` | `/api/transactions/:id` | Kasir / Pemilik | Detail struk transaksi lengkap |
@@ -336,11 +354,9 @@ flowchart TD
     %% Sub-alur Menu A: Produk
     subgraph SubProduk ["📦 Manajemen Produk & Stok"]
         MenuA --> ProdList["Lihat Daftar Produk<br/>(Nama, Kategori, Harga, Stok)"]
-        ProdList --> ProdEdit["✏️ Edit Data Produk<br/>(Ubah Nama, Kategori, Harga, Stok, Tambah/Hapus)"]
-        ProdEdit --> CekStok{"Stok <= Batas Minimum?"}
-        CekStok -- "✅ Aman" --> ProdSaved["💾 Simpan Perubahan di Database"]
-        CekStok -- "⚠️ Low Stock!" --> AlertEmail["📧 Kirim Alert Low Stock<br/>Otomatis ke Email Owner"]
-        AlertEmail --> ProdSaved
+        ProdList --> ProdEdit["✏️ Edit / Restock Produk & Atur Jadwal Alert<br/>(PUT/PATCH /api/products & /api/notifications/low-stock/settings)"]
+        ProdEdit --> ProdSaved["💾 Simpan Perubahan di Database"]
+        ProdSaved --> DigestSchedule["🗓️ Digest Terjadwal + Alert Kritis Stok = 0"]
     end
 
     %% Sub-alur Menu B: Transaksi
@@ -361,9 +377,9 @@ flowchart TD
 ```
 
 1. **Login Owner:** Pemilik masuk menggunakan kredensial khusus `pemilik` (`POST /api/auth/login`). Jika terverifikasi, sistem mengarahkan ke **Dashboard Owner**.
-2. **A. Menu Produk:**
+2. **A. Menu Produk & Jadwal Notifikasi:**
    - Menampilkan dan mengedit seluruh atribut produk meliputi **Nama, Kategori, Harga, dan Stok** (`POST / PUT / PATCH / DELETE /api/products`).
-   - Memantau ketersediaan stok barang (`GET /api/products/low-stock`) dan mengirimkan **notifikasi *Alert Low Stock* otomatis ke Email Owner** saat stok menyentuh atau berada di bawah batas minimum.
+   - Memantau ketersediaan stok barang (`GET /api/products/low-stock`), mengatur jadwal **digest rekap berkala** (`off`/`daily`/`weekly`/`monthly` WIB via `/api/notifications/low-stock/settings`) serta **alert kritis otomatis saat `stok = 0`** pada transaksi checkout, dan menyediakan tombol kirim manual (`POST /api/products/low-stock/notify`).
 3. **B. Menu Transaksi:**
    - Memantau **riwayat transaksi dari masing-masing kasir** (`GET /api/transactions?kasir=<id>`) beserta rincian struk belanja per transaksi (`GET /api/transactions/:id`).
 4. **C. Menu Laporan:**

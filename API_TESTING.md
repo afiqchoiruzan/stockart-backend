@@ -228,6 +228,49 @@ curl -X GET http://localhost:5000/api/reports/top-products \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+## 4b. Notifications & Low Stock Alert (Hanya Pemilik)
+
+Sistem menggunakan arsitektur hybrid:
+- **Digest Terjadwal:** 1 email rekap produk dengan `stok <= stokMinimum` sesuai jadwal WIB (`off | daily | weekly | monthly`, status & slot terakhir disimpan di MongoDB).
+- **Alert Kritis (`stok = 0`):** email segera dikirim 1 kali saat kasir checkout membuat produk habis (`stokHabisNotifiedAt` di-reset otomatis saat restock/update/void mengembalikan `stok > 0`).
+- **Manual Trigger:** `POST /api/products/low-stock/notify` tetap tersedia untuk kirim rekap kapan saja.
+
+### Get Low Stock Alert Settings
+
+```bash
+curl -X GET http://localhost:5000/api/notifications/low-stock/settings \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Update Low Stock Alert Settings
+
+Field yang didukung (bisa update parsial):
+- `digestFrequency`: `"off" | "daily" | "weekly" | "monthly"`
+- `digestTime`: format `"HH:mm"` (WIB UTC+7, mis. `"07:00"`)
+- `digestWeekday`: `0..6` (`0` = Minggu, `1` = Senin, ..., `6` = Sabtu)
+- `digestDayOfMonth`: `1..28`
+- `criticalAlertEnabled`: `true | false`
+
+```bash
+curl -X PUT http://localhost:5000/api/notifications/low-stock/settings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "digestFrequency": "weekly",
+    "digestTime": "07:00",
+    "digestWeekday": 1,
+    "digestDayOfMonth": 1,
+    "criticalAlertEnabled": true
+  }'
+```
+
+### Trigger Manual Rekap Low Stock
+
+```bash
+curl -X POST http://localhost:5000/api/products/low-stock/notify \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 ---
 
 ## 5. Postman Collection
