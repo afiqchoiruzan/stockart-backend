@@ -23,9 +23,20 @@ const userSchema = new mongoose.Schema(
             enum: ['pemilik', 'kasir'],
             default: 'kasir',
         },
+        activeSessionId: {
+            type: String,
+            default: null,
+        },
     },
     {
         timestamps: true,
+        toJSON: {
+            transform(doc, ret) {
+                delete ret.password;
+                delete ret.activeSessionId;
+                return ret;
+            },
+        },
     }
 );
 

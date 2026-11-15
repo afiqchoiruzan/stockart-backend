@@ -8,13 +8,25 @@ const reportRoutes = require('./routes/reportRoutes');
 
 const app = express();
 
+// Sembunyikan header X-Powered-By dan pasang security headers standar
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+});
+
+// Percayai reverse proxy (Railway / Vercel) agar express-rate-limit membaca IP asli klien
+app.set('trust proxy', 1);
+
 const allowedOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
     : true;
 
 app.use(cors({ origin: allowedOrigins }));
 
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);

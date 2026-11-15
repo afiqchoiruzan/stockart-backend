@@ -1,6 +1,15 @@
 const Product = require('../models/Product');
 const { sendLowStockAlertEmail } = require('../services/emailService');
 
+const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const stripHargaBeliForKasir = (item, role) => {
+  if (role !== 'kasir' || !item) return item;
+  const obj = typeof item.toObject === 'function' ? item.toObject() : { ...item };
+  delete obj.hargaBeli;
+  return obj;
+};
+
 // GET /api/products
 exports.getProducts = async (req, res) => {
   try {
@@ -8,7 +17,10 @@ exports.getProducts = async (req, res) => {
     
     let query = {};
 
-    if (aktif === 'all') {
+    if (req.user?.role === 'kasir') {
+      // Kasir hanya boleh melihat produk yang aktif
+      query.aktif = true;
+    } else if (aktif === 'all') {
       // tampilkan semua status
     } else if (aktif !== undefined) {
       query.aktif = aktif === 'true';
@@ -17,25 +29,30 @@ exports.getProducts = async (req, res) => {
     }
     
     if (barcode) {
-      query.kodeProduk = barcode;
+      query.kodeProduk = String(barcode).trim();
     }
     
     if (search) {
+      const safeSearch = escapeRegex(search);
       query.$or = [
-        { nama: { $regex: search, $options: 'i' } },
-        { kodeProduk: { $regex: search, $options: 'i' } }
+        { nama: { $regex: safeSearch, $options: 'i' } },
+        { kodeProduk: { $regex: safeSearch, $options: 'i' } }
       ];
     }
     
     if (kategori) {
-      query.kategori = { $regex: kategori, $options: 'i' };
+      query.kategori = { $regex: escapeRegex(kategori), $options: 'i' };
     }
 
     const products = await Product.find(query).sort({ createdAt: -1 });
+    const role = req.user?.role;
+    const data = role === 'kasir'
+      ? products.map((p) => stripHargaBeliForKasir(p, role))
+      : products;
 
     res.status(200).json({
       success: true,
-      data: products,
+      data,
     });
   } catch (error) {
     res.status(500).json({
@@ -118,7 +135,7 @@ exports.getProductById = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: product,
+      data: stripHargaBeliForKasir(product, req.user?.role),
     });
   } catch (error) {
     res.status(400).json({
