@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const { transactionRules } = require('../middleware/validate');
+const { resetOutOfStockFlags } = require('./lowStockAlertService');
 
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 const validId = (id) => typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id);
@@ -66,6 +67,10 @@ async function voidTransaction(id, userId) {
           { $inc: { stok: item.jumlah } }, { session });
         if (result.matchedCount !== 1) throw fail(409, 'Produk telah dihapus; stok tidak dapat dikembalikan');
       }
+      await resetOutOfStockFlags(
+        transaction.detailBarang.map((item) => item.produk),
+        { session }
+      );
     }
     transaction.status = 'batal';
     transaction.dibatalkanPada = new Date();
