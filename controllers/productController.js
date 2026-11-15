@@ -1,16 +1,6 @@
 const Product = require('../models/Product');
-const { sendLowStockAlertEmail, isEmailConfigured } = require('../services/emailService');
-
-function notifyIfLowStock(product) {
-  if (
-    !process.env.NODE_TEST_CONTEXT &&
-    isEmailConfigured() &&
-    product.aktif &&
-    product.stok <= product.stokMinimum
-  ) {
-    sendLowStockAlertEmail([product]).catch(() => {});
-  }
-}
+const { sendLowStockAlertEmail } = require('../services/emailService');
+const { resetOutOfStockFlags } = require('../services/lowStockAlertService');
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -111,7 +101,9 @@ exports.notifyLowStockProducts = async (req, res) => {
       });
     }
 
-    const emailResult = await sendLowStockAlertEmail(products, req.body?.email);
+    const emailResult = await sendLowStockAlertEmail(products, req.body?.email, {
+      context: 'manual',
+    });
 
     res.status(200).json({
       success: true,
@@ -166,9 +158,6 @@ exports.createProduct = async (req, res) => {
       message: 'Produk berhasil ditambahkan',
       data: product,
     });
-
-    // Otomatis kirim email Alert Low Stock jika produk baru memiliki stok <= batas minimum
-    notifyIfLowStock(product);
   } catch (error) {
     res.status(400).json({
       success: false,
@@ -197,14 +186,16 @@ exports.updateProduct = async (req, res) => {
       });
     }
 
+    if (product.stok > 0 && product.stokHabisNotifiedAt) {
+      await resetOutOfStockFlags([product._id]);
+      product.stokHabisNotifiedAt = null;
+    }
+
     res.status(200).json({
       success: true,
       message: 'Produk berhasil diperbarui',
       data: product,
     });
-
-    // Otomatis kirim email Alert Low Stock jika stok produk <= batas minimum
-    notifyIfLowStock(product);
   } catch (error) {
     res.status(400).json({
       success: false,
@@ -294,14 +285,16 @@ exports.restockProduct = async (req, res) => {
       });
     }
 
+    if (product.stok > 0 && product.stokHabisNotifiedAt) {
+      await resetOutOfStockFlags([product._id]);
+      product.stokHabisNotifiedAt = null;
+    }
+
     res.status(200).json({
       success: true,
       message: 'Stok berhasil ditambahkan',
       data: product,
     });
-
-    // Otomatis kirim email jika setelah restock ternyata stok masih di bawah batas minimum
-    notifyIfLowStock(product);
   } catch (error) {
     res.status(400).json({
       success: false,

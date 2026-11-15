@@ -12,6 +12,7 @@ const {
   buildLowStockEmailBody,
 } = require('../services/emailService');
 const Product = require('../models/Product');
+const NotificationSetting = require('../models/NotificationSetting');
 const productController = require('../controllers/productController');
 const transactionService = require('../services/transactionService');
 const transactionController = require('../controllers/transactionController');
@@ -399,7 +400,10 @@ test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', as
       process.env.BREVO_API_KEY = 'xkeysib-brevo-only';
       assert.equal(isEmailConfigured(), true);
 
-      // Verifikasi trigger otomatis di productController & transactionController saat SMTP_USER/SMTP_PASS dihapus
+      // Verifikasi perilaku baru:
+      // 1) productController.createProduct dengan stok low TIDAK kirim email ketengan
+      // 2) transactionController.createTransaction dengan stok > 0 TIDAK kirim email ketengan
+      // 3) transactionController.createTransaction dengan stok === 0 mengirim 1 email Kritis via Brevo
       delete process.env.NODE_TEST_CONTEXT;
       process.env.EMAIL_FROM = 'sender@stockart.local';
       process.env.OWNER_EMAIL = 'owner@stockart.local';
@@ -422,6 +426,14 @@ test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', as
         stokMinimum: 5,
         aktif: true,
       };
+      const fakeZeroProduct = {
+        ...fakeLowProduct,
+        _id: '66e533333333333333333333',
+        nama: 'Sabun Habis Brevo',
+        kodeProduk: 'BRV00',
+        stok: 0,
+        stokHabisNotifiedAt: new Date(),
+      };
 
       subtest.mock.method(Product, 'create', async () => fakeLowProduct);
       const mockRes = () => ({
@@ -435,23 +447,44 @@ test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', as
       await productController.createProduct({ body: fakeLowProduct }, prodRes);
       assert.equal(prodRes.statusCode, 201);
 
+      subtest.mock.method(NotificationSetting, 'findOneAndUpdate', async () => ({
+        criticalAlertEnabled: true,
+      }));
+      subtest.mock.method(Product, 'findOneAndUpdate', async (filter) =>
+        String(filter._id) === fakeZeroProduct._id ? fakeZeroProduct : null
+      );
+
+      // Transaksi produk yang masih tersisa stok (2) -> tidak kirim email kritis
       subtest.mock.method(transactionService, 'checkout', async () => ({
-        _id: '66e599999999999999999999',
+        _id: '66e599999999999999999998',
         detailBarang: [{ produk: fakeLowProduct._id, jumlah: 1 }],
       }));
-      subtest.mock.method(Product, 'find', async () => [fakeLowProduct]);
-
-      const txRes = mockRes();
+      const txLowRes = mockRes();
       await transactionController.createTransaction(
         { body: { detailBarang: [{ produk: fakeLowProduct._id, jumlah: 1 }] }, user: { _id: '66e588888888888888888888' } },
-        txRes
+        txLowRes
       );
-      assert.equal(txRes.statusCode, 201);
+      assert.equal(txLowRes.statusCode, 201);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal(brevoCalls.length, 0);
+
+      // Transaksi produk yang menyentuh stok 0 -> kirim tepat 1 email kritis via Brevo
+      subtest.mock.method(transactionService, 'checkout', async () => ({
+        _id: '66e599999999999999999999',
+        detailBarang: [{ produk: fakeZeroProduct._id, jumlah: 1 }],
+      }));
+      const txZeroRes = mockRes();
+      await transactionController.createTransaction(
+        { body: { detailBarang: [{ produk: fakeZeroProduct._id, jumlah: 1 }] }, user: { _id: '66e588888888888888888888' } },
+        txZeroRes
+      );
+      assert.equal(txZeroRes.statusCode, 201);
 
       await new Promise((resolve) => setTimeout(resolve, 25));
-      assert.equal(brevoCalls.length, 2);
+      assert.equal(brevoCalls.length, 1);
       assert.equal(brevoCalls[0].url, 'https://api.brevo.com/v3/smtp/email');
-      assert.equal(brevoCalls[1].url, 'https://api.brevo.com/v3/smtp/email');
+      const sentPayload = JSON.parse(brevoCalls[0].init.body);
+      assert.match(sentPayload.subject, /^\[StockArt Kritis\] Stok Habis: Sabun Habis Brevo/);
     } finally {
       for (const [k, v] of Object.entries(prevEnv)) {
         if (v === undefined) delete process.env[k];
