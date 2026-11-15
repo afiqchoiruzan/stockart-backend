@@ -33,14 +33,24 @@ test('filter harian menggunakan WIB dan menolak tanggal/ID/status tidak valid', 
 });
 
 test('alur HTTP transaksi dengan MongoDB replica set', async (t) => {
-  // A unique database keeps tests independent of application data and other suites.
-  const dbName = `stockart_transaction_test_${process.pid}_${Date.now()}`;
+  // Nama database ringkas (< 38 byte batas MongoDB Atlas M0) agar tetap terisolasi dan tidak gagal di CI.
+  const dbName = `t_tx_${process.pid}_${Date.now().toString(36)}`;
   await mongoose.connect(process.env.MONGO_URI, { dbName, serverSelectionTimeoutMS: 10000 });
   let server;
   t.after(async () => {
-    if (server) await new Promise((resolve) => server.close(resolve));
-    await mongoose.connection.dropDatabase();
-    await mongoose.disconnect();
+    if (server) {
+      server.closeAllConnections?.();
+      await new Promise((resolve) => server.close(resolve));
+    }
+    try {
+      if (mongoose.connection.readyState === 1) {
+        await mongoose.connection.dropDatabase();
+      }
+    } finally {
+      if (mongoose.connection.readyState !== 0) {
+        await mongoose.disconnect();
+      }
+    }
   });
   await Promise.all([Product.init(), Transaction.init(), User.init()]);
   server = app.listen(0, '127.0.0.1');
@@ -176,7 +186,8 @@ test('alur HTTP transaksi dengan MongoDB replica set', async (t) => {
         detailBarang: [{ produk: p._id, jumlah: 1, hargaSatuan: 1000, subtotal: 1000 }] });
       ids.push(String(tx._id));
     }
-    const response = await request('GET', `/transactions?tanggal=2026-09-29&kasir=${owner._id}&status=selesai`, undefined, token);
+    // Pemilik dapat memfilter riwayat transaksi lintas kasir (role kasir dibatasi hanya miliknya sejak auth-security)
+    const response = await request('GET', `/transactions?tanggal=2026-09-29&kasir=${owner._id}&status=selesai`, undefined, ownerToken);
     assert.equal(response.status, 200);
     assert.deepEqual(response.data.map((tx) => tx._id), [ids[2], ids[1]]);
     assert.equal((await request('GET', '/transactions?tanggal=2026-02-30', undefined, token)).status, 400);
