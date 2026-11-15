@@ -11,7 +11,13 @@ function sendError(res, error) {
 
 exports.getTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find(service.historyFilter(req.query))
+    // Jika pemanggil adalah kasir, kunci filter agar hanya melihat transaksinya sendiri
+    const queryParams =
+      req.user?.role === 'kasir'
+        ? { ...req.query, kasir: String(req.user._id) }
+        : req.query;
+
+    const transactions = await Transaction.find(service.historyFilter(queryParams))
       .populate('kasir', 'nama username role')
       .populate('detailBarang.produk', 'nama kodeProduk hargaJual')
       .sort({ createdAt: -1, _id: -1 });
@@ -26,6 +32,13 @@ exports.getTransactionById = async (req, res) => {
       .populate('kasir', 'nama username role')
       .populate('detailBarang.produk', 'nama kodeProduk hargaJual');
     if (!transaction) throw service.fail(404, 'Transaksi tidak ditemukan');
+
+    // Kasir tidak boleh mengakses detail transaksi milik kasir lain
+    const trxKasirId = String(transaction.kasir?._id || transaction.kasir || '');
+    if (req.user?.role === 'kasir' && trxKasirId !== String(req.user._id)) {
+      throw service.fail(403, 'Anda tidak memiliki akses ke transaksi kasir lain');
+    }
+
     res.json({ success: true, data: transaction });
   } catch (error) { sendError(res, error); }
 };

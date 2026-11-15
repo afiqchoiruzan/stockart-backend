@@ -13,14 +13,27 @@ const protect = async (req, res, next) => {
       // Ambil token dari header Authorization: Bearer <TOKEN>
       token = req.headers.authorization.split(' ')[1];
 
-      // Verifikasi token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      // Verifikasi token dengan mengunci algoritma HS256
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+        algorithms: ['HS256'],
+      });
 
       // Ambil data user dari database (tanpa password)
       req.user = await User.findById(decoded.id).select('-password');
 
       if (!req.user) {
         return res.status(401).json({ message: 'User tidak ditemukan' });
+      }
+
+      // Khusus kasir: hanya izinkan 1 perangkat aktif & tolak token yang sudah logout
+      if (
+        req.user.role === 'kasir' &&
+        (req.user.activeSessionId || decoded.sessionId) &&
+        decoded.sessionId !== req.user.activeSessionId
+      ) {
+        return res.status(401).json({
+          message: 'Sesi berakhir karena akun kasir ini telah logout atau login di perangkat lain'
+        });
       }
 
       next(); // Lanjut ke controller berikutnya
