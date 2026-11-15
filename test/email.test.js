@@ -191,6 +191,90 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
       );
     }
   });
+  await t.test('Konteks digest, critical, dan manual membedakan subject, header, dan footer tanpa emoji/warna tambahan', () => {
+    const now = new Date('2026-11-12T10:00:00Z');
+    const weeklySubject = buildLowStockEmailSubject(sampleProducts, now, {
+      context: 'digest',
+      frequency: 'weekly',
+    });
+    assert.match(weeklySubject, /^\[StockArt Rekap Mingguan\]/);
+    assert.equal(EMOJI_REGEX.test(weeklySubject), false);
+
+    const dailySubject = buildLowStockEmailSubject([sampleProducts[1]], now, {
+      context: 'digest',
+      frequency: 'daily',
+    });
+    assert.match(dailySubject, /^\[StockArt Rekap Harian\]/);
+
+    const monthlySubject = buildLowStockEmailSubject(sampleProducts, now, {
+      context: 'digest',
+      frequency: 'monthly',
+    });
+    assert.match(monthlySubject, /^\[StockArt Rekap Bulanan\]/);
+
+    const critOne = buildLowStockEmailSubject([sampleProducts[0]], now, { context: 'critical' });
+    assert.match(critOne, /^\[StockArt Kritis\] Stok Habis: Minyak Goreng Bimoli 2L/);
+    assert.equal(EMOJI_REGEX.test(critOne), false);
+
+    const critMany = buildLowStockEmailSubject(sampleProducts, now, { context: 'critical' });
+    assert.match(critMany, /^\[StockArt Kritis\] Stok Habis: Minyak Goreng Bimoli 2L \(\+1 Produk Lainnya\)/);
+
+    const wibDateTime = 'Kamis, 12 November 2026, 17:00 WIB';
+    const digestHeader = buildLowStockEmailHeader(sampleProducts, {
+      wibDateTime,
+      isCritical: true,
+      habisCount: 1,
+      menipisCount: 1,
+      context: 'digest',
+      frequency: 'weekly',
+    });
+    assert.match(digestHeader, /Rekap Mingguan Stok Produk Menipis/);
+    assert.equal(EMOJI_REGEX.test(digestHeader), false);
+
+    const critHeader = buildLowStockEmailHeader([sampleProducts[0]], {
+      wibDateTime,
+      isCritical: true,
+      habisCount: 1,
+      menipisCount: 0,
+      context: 'critical',
+    });
+    assert.match(critHeader, /Peringatan Kritis: Stok Produk Habis \(0\)/);
+    assert.equal(EMOJI_REGEX.test(critHeader), false);
+
+    const digestBody = buildLowStockEmailBody(sampleProducts, {
+      to: 'owner@test.com',
+      wibDateTime,
+      context: 'digest',
+      frequency: 'monthly',
+    });
+    assert.match(digestBody, /sesuai jadwal alert stok yang aktif/);
+    assert.equal(EMOJI_REGEX.test(digestBody), false);
+
+    const critBody = buildLowStockEmailBody([sampleProducts[0]], {
+      to: 'owner@test.com',
+      wibDateTime,
+      context: 'critical',
+    });
+    assert.match(critBody, /transaksi kasir membuat stok produk mencapai 0/);
+
+    const manualBody = buildLowStockEmailBody(sampleProducts, {
+      to: 'owner@test.com',
+      wibDateTime,
+      context: 'manual',
+    });
+    assert.match(manualBody, /dikirim secara manual/);
+
+    for (const html of [digestHeader, critHeader, digestBody, critBody, manualBody]) {
+      const hexMatches = html.match(/#[0-9A-Fa-f]{6}\b/g) || [];
+      for (const hex of hexMatches) {
+        const upper = hex.toUpperCase();
+        assert.ok(
+          ALLOWED_MONOCHROME_HEX.has(upper) || ALLOWED_RED_HEX.has(upper),
+          `Warna tidak diizinkan: ${upper}`
+        );
+      }
+    }
+  });
 });
 
 test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', async (t) => {
