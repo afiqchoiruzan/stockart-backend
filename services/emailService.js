@@ -4,8 +4,80 @@ const tls = require('node:tls');
 const { generateReportPdfBuffer } = require('./pdfService');
 
 /**
- * Mengirim email melalui Gmail SMTP over SSL/TLS (port 465)
- * menggunakan modul bawaan Node.js (`node:tls`), mendukung lampiran file PDF (multipart/mixed).
+ * Normalisasi error jaringan (termasuk AggregateError di Node 20+ yang message-nya kosong)
+ * agar selalu memiliki pesan error yang informatif.
+ */
+function formatNetworkError(err) {
+  if (!err) return new Error('Terjadi kesalahan jaringan yang tidak diketahui');
+  if (err.message) return err;
+
+  if (Array.isArray(err.errors) && err.errors.length > 0) {
+    const details = err.errors
+      .map((inner) => inner?.message || inner?.code || String(inner))
+      .filter(Boolean)
+      .join('; ');
+    if (details) return new Error(details);
+  }
+
+  return new Error(err.code || err.name || 'Koneksi jaringan gagal');
+}
+
+/**
+ * Mengirim email melalui Brevo Transactional Email HTTP API (port 443 HTTPS).
+ * Cocok untuk lingkungan cloud seperti Railway yang memblokir port SMTP (25/465/587).
+ */
+async function sendEmailViaBrevo({ apiKey, senderEmail, recipient, subject, html, attachment }) {
+  const payload = {
+    sender: { name: 'StockArt POS System', email: senderEmail },
+    to: [{ email: recipient }],
+    subject,
+    htmlContent: html,
+  };
+
+  if (attachment && attachment.contentBuffer) {
+    payload.attachment = [
+      {
+        name: attachment.filename,
+        content: Buffer.from(attachment.contentBuffer).toString('base64'),
+      },
+    ];
+  }
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      'api-key': apiKey,
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!response.ok) {
+    const rawText = await response.text().catch(() => '');
+    let detail = rawText;
+    try {
+      const parsed = JSON.parse(rawText);
+      detail = parsed.message || parsed.code || rawText;
+    } catch {
+      // gunakan rawText apa adanya
+    }
+    throw new Error(`Brevo API Error (${response.status}): ${detail || response.statusText}`);
+  }
+
+  return {
+    success: true,
+    from: senderEmail,
+    to: recipient,
+    subject,
+    attachment: attachment ? attachment.filename : null,
+  };
+}
+
+/**
+ * Mengirim email melalui Brevo HTTP API (jika BREVO_API_KEY diset)
+ * atau fallback ke Gmail SMTP over SSL/TLS (port 465) menggunakan `node:tls`.
  *
  * @param {object} options
  * @param {string} [options.to]             - Email penerima (default: process.env.OWNER_EMAIL)
@@ -14,9 +86,27 @@ const { generateReportPdfBuffer } = require('./pdfService');
  * @param {object} [options.attachment]     - Lampiran file opsional { filename, contentBuffer, contentType }
  */
 function sendEmail({ to, subject, html, attachment }) {
+  const brevoApiKey = (process.env.BREVO_API_KEY || '').trim();
   const smtpUser = (process.env.SMTP_USER || '').trim();
+  const senderEmail = (process.env.EMAIL_FROM || smtpUser).trim();
   const smtpPass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
   const recipient = (to || process.env.OWNER_EMAIL || '').trim();
+
+  if (brevoApiKey) {
+    if (!senderEmail || !recipient) {
+      return Promise.reject(
+        new Error('Konfigurasi EMAIL_FROM/SMTP_USER atau OWNER_EMAIL belum lengkap di .env')
+      );
+    }
+    return sendEmailViaBrevo({
+      apiKey: brevoApiKey,
+      senderEmail,
+      recipient,
+      subject,
+      html,
+      attachment,
+    });
+  }
 
   if (!smtpUser || !smtpPass || !recipient) {
     return Promise.reject(
@@ -48,7 +138,7 @@ function sendEmail({ to, subject, html, attachment }) {
     });
 
     socket.on('error', (err) => {
-      reject(err);
+      reject(formatNetworkError(err));
     });
 
     socket.on('data', (chunk) => {

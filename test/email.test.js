@@ -2,7 +2,10 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const tls = require('node:tls');
+const { EventEmitter } = require('node:events');
 const {
+  sendEmail,
   buildLowStockEmailSubject,
   buildLowStockEmailHeader,
   buildLowStockEmailBody,
@@ -181,6 +184,99 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
         false,
         `Produk aman tidak boleh memakai warna merah (${upper})`
       );
+    }
+  });
+});
+
+test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', async (t) => {
+  await t.test('Mengirim lewat Brevo HTTP API saat BREVO_API_KEY diset (termasuk lampiran)', async (subtest) => {
+    const prevEnv = {
+      BREVO_API_KEY: process.env.BREVO_API_KEY,
+      EMAIL_FROM: process.env.EMAIL_FROM,
+      SMTP_USER: process.env.SMTP_USER,
+      OWNER_EMAIL: process.env.OWNER_EMAIL,
+    };
+    process.env.BREVO_API_KEY = 'xkeysib-test-key';
+    process.env.EMAIL_FROM = 'sender@stockart.local';
+    process.env.OWNER_EMAIL = 'owner@stockart.local';
+
+    const calls = [];
+    subtest.mock.method(globalThis, 'fetch', async (url, init) => {
+      calls.push({ url, init });
+      return {
+        ok: true,
+        status: 201,
+        text: async () => JSON.stringify({ messageId: 'msg-123' }),
+      };
+    });
+
+    try {
+      const result = await sendEmail({
+        subject: 'Tes Brevo',
+        html: '<p>Halo</p>',
+        attachment: {
+          filename: 'laporan.pdf',
+          contentBuffer: Buffer.from('pdf-bytes'),
+        },
+      });
+
+      assert.equal(result.success, true);
+      assert.equal(result.from, 'sender@stockart.local');
+      assert.equal(result.to, 'owner@stockart.local');
+      assert.equal(result.attachment, 'laporan.pdf');
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].url, 'https://api.brevo.com/v3/smtp/email');
+      assert.equal(calls[0].init.headers['api-key'], 'xkeysib-test-key');
+
+      const body = JSON.parse(calls[0].init.body);
+      assert.equal(body.sender.email, 'sender@stockart.local');
+      assert.equal(body.to[0].email, 'owner@stockart.local');
+      assert.equal(body.attachment[0].name, 'laporan.pdf');
+      assert.equal(body.attachment[0].content, Buffer.from('pdf-bytes').toString('base64'));
+    } finally {
+      for (const [k, v] of Object.entries(prevEnv)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  await t.test('Normalisasi AggregateError dengan message kosong pada fallback SMTP', async (subtest) => {
+    const prevEnv = {
+      BREVO_API_KEY: process.env.BREVO_API_KEY,
+      SMTP_USER: process.env.SMTP_USER,
+      SMTP_PASS: process.env.SMTP_PASS,
+      OWNER_EMAIL: process.env.OWNER_EMAIL,
+    };
+    delete process.env.BREVO_API_KEY;
+    process.env.SMTP_USER = 'bot@stockart.local';
+    process.env.SMTP_PASS = 'secretapppass';
+    process.env.OWNER_EMAIL = 'owner@stockart.local';
+
+    subtest.mock.method(tls, 'connect', () => {
+      const socket = new EventEmitter();
+      socket.write = () => {};
+      socket.end = () => {};
+      socket.destroy = () => {};
+      queueMicrotask(() => {
+        const innerErr = Object.assign(new Error('connect ECONNREFUSED 142.250.4.108:465'), {
+          code: 'ECONNREFUSED',
+        });
+        socket.emit('error', new AggregateError([innerErr], ''));
+      });
+      return socket;
+    });
+
+    try {
+      await assert.rejects(
+        () => sendEmail({ subject: 'Tes', html: '<p>Tes</p>' }),
+        /connect ECONNREFUSED/
+      );
+    } finally {
+      for (const [k, v] of Object.entries(prevEnv)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
     }
   });
 });
