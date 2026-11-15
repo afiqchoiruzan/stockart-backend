@@ -1,5 +1,16 @@
 const Product = require('../models/Product');
-const { sendLowStockAlertEmail } = require('../services/emailService');
+const { sendLowStockAlertEmail, isEmailConfigured } = require('../services/emailService');
+
+function notifyIfLowStock(product) {
+  if (
+    !process.env.NODE_TEST_CONTEXT &&
+    isEmailConfigured() &&
+    product.aktif &&
+    product.stok <= product.stokMinimum
+  ) {
+    sendLowStockAlertEmail([product]).catch(() => {});
+  }
+}
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -157,15 +168,7 @@ exports.createProduct = async (req, res) => {
     });
 
     // Otomatis kirim email Alert Low Stock jika produk baru memiliki stok <= batas minimum
-    if (
-      !process.env.NODE_TEST_CONTEXT &&
-      process.env.SMTP_USER &&
-      process.env.SMTP_PASS &&
-      product.aktif &&
-      product.stok <= product.stokMinimum
-    ) {
-      sendLowStockAlertEmail([product]).catch(() => {});
-    }
+    notifyIfLowStock(product);
   } catch (error) {
     res.status(400).json({
       success: false,
@@ -201,15 +204,7 @@ exports.updateProduct = async (req, res) => {
     });
 
     // Otomatis kirim email Alert Low Stock jika stok produk <= batas minimum
-    if (
-      !process.env.NODE_TEST_CONTEXT &&
-      process.env.SMTP_USER &&
-      process.env.SMTP_PASS &&
-      product.aktif &&
-      product.stok <= product.stokMinimum
-    ) {
-      sendLowStockAlertEmail([product]).catch(() => {});
-    }
+    notifyIfLowStock(product);
   } catch (error) {
     res.status(400).json({
       success: false,
@@ -306,15 +301,7 @@ exports.restockProduct = async (req, res) => {
     });
 
     // Otomatis kirim email jika setelah restock ternyata stok masih di bawah batas minimum
-    if (
-      !process.env.NODE_TEST_CONTEXT &&
-      process.env.SMTP_USER &&
-      process.env.SMTP_PASS &&
-      product.aktif &&
-      product.stok <= product.stokMinimum
-    ) {
-      sendLowStockAlertEmail([product]).catch(() => {});
-    }
+    notifyIfLowStock(product);
   } catch (error) {
     res.status(400).json({
       success: false,

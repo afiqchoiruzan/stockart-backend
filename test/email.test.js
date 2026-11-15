@@ -5,11 +5,16 @@ const assert = require('node:assert/strict');
 const tls = require('node:tls');
 const { EventEmitter } = require('node:events');
 const {
+  isEmailConfigured,
   sendEmail,
   buildLowStockEmailSubject,
   buildLowStockEmailHeader,
   buildLowStockEmailBody,
 } = require('../services/emailService');
+const Product = require('../models/Product');
+const productController = require('../controllers/productController');
+const transactionService = require('../services/transactionService');
+const transactionController = require('../controllers/transactionController');
 
 const EMOJI_REGEX = /[\p{Extended_Pictographic}\u2600-\u27BF]/u;
 
@@ -275,6 +280,94 @@ test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', as
         () => sendEmail({ subject: 'Tes', html: '<p>Tes</p>' }),
         /connect ECONNREFUSED/
       );
+    } finally {
+      for (const [k, v] of Object.entries(prevEnv)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+
+  await t.test('isEmailConfigured & trigger otomatis bekerja hanya dengan BREVO_API_KEY tanpa SMTP_USER/SMTP_PASS', async (subtest) => {
+    const prevEnv = {
+      NODE_TEST_CONTEXT: process.env.NODE_TEST_CONTEXT,
+      BREVO_API_KEY: process.env.BREVO_API_KEY,
+      EMAIL_FROM: process.env.EMAIL_FROM,
+      SMTP_USER: process.env.SMTP_USER,
+      SMTP_PASS: process.env.SMTP_PASS,
+      OWNER_EMAIL: process.env.OWNER_EMAIL,
+    };
+
+    try {
+      delete process.env.BREVO_API_KEY;
+      delete process.env.SMTP_USER;
+      delete process.env.SMTP_PASS;
+      assert.equal(isEmailConfigured(), false);
+
+      process.env.SMTP_USER = 'bot@stockart.local';
+      assert.equal(isEmailConfigured(), false);
+
+      process.env.SMTP_PASS = 'secretapppass';
+      assert.equal(isEmailConfigured(), true);
+
+      delete process.env.SMTP_USER;
+      delete process.env.SMTP_PASS;
+      process.env.BREVO_API_KEY = 'xkeysib-brevo-only';
+      assert.equal(isEmailConfigured(), true);
+
+      // Verifikasi trigger otomatis di productController & transactionController saat SMTP_USER/SMTP_PASS dihapus
+      delete process.env.NODE_TEST_CONTEXT;
+      process.env.EMAIL_FROM = 'sender@stockart.local';
+      process.env.OWNER_EMAIL = 'owner@stockart.local';
+
+      const brevoCalls = [];
+      subtest.mock.method(globalThis, 'fetch', async (url, init) => {
+        brevoCalls.push({ url, init });
+        return { ok: true, status: 201, text: async () => '{}' };
+      });
+
+      const fakeLowProduct = {
+        _id: '66e511111111111111111111',
+        nama: 'Sabun Brevo Test',
+        kodeProduk: 'BRV01',
+        kategori: 'Kebersihan',
+        hargaBeli: 3000,
+        hargaJual: 4000,
+        stok: 2,
+        satuan: 'pcs',
+        stokMinimum: 5,
+        aktif: true,
+      };
+
+      subtest.mock.method(Product, 'create', async () => fakeLowProduct);
+      const mockRes = () => ({
+        statusCode: null,
+        body: null,
+        status(code) { this.statusCode = code; return this; },
+        json(payload) { this.body = payload; return this; },
+      });
+
+      const prodRes = mockRes();
+      await productController.createProduct({ body: fakeLowProduct }, prodRes);
+      assert.equal(prodRes.statusCode, 201);
+
+      subtest.mock.method(transactionService, 'checkout', async () => ({
+        _id: '66e599999999999999999999',
+        detailBarang: [{ produk: fakeLowProduct._id, jumlah: 1 }],
+      }));
+      subtest.mock.method(Product, 'find', async () => [fakeLowProduct]);
+
+      const txRes = mockRes();
+      await transactionController.createTransaction(
+        { body: { detailBarang: [{ produk: fakeLowProduct._id, jumlah: 1 }] }, user: { _id: '66e588888888888888888888' } },
+        txRes
+      );
+      assert.equal(txRes.statusCode, 201);
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal(brevoCalls.length, 2);
+      assert.equal(brevoCalls[0].url, 'https://api.brevo.com/v3/smtp/email');
+      assert.equal(brevoCalls[1].url, 'https://api.brevo.com/v3/smtp/email');
     } finally {
       for (const [k, v] of Object.entries(prevEnv)) {
         if (v === undefined) delete process.env[k];
