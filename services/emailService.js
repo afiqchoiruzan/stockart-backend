@@ -23,13 +23,23 @@ function formatNetworkError(err) {
 }
 
 /**
+ * Memecah daftar email penerima yang dipisahkan koma menjadi array alamat bersih.
+ */
+function parseRecipients(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((email) => email.trim())
+    .filter(Boolean);
+}
+
+/**
  * Mengirim email melalui Brevo Transactional Email HTTP API (port 443 HTTPS).
  * Cocok untuk lingkungan cloud seperti Railway yang memblokir port SMTP (25/465/587).
  */
-async function sendEmailViaBrevo({ apiKey, senderEmail, recipient, subject, html, attachment }) {
+async function sendEmailViaBrevo({ apiKey, senderEmail, recipients, subject, html, attachment }) {
   const payload = {
     sender: { name: 'StockArt POS System', email: senderEmail },
-    to: [{ email: recipient }],
+    to: recipients.map((email) => ({ email })),
     subject,
     htmlContent: html,
   };
@@ -69,7 +79,7 @@ async function sendEmailViaBrevo({ apiKey, senderEmail, recipient, subject, html
   return {
     success: true,
     from: senderEmail,
-    to: recipient,
+    to: recipients.join(', '),
     subject,
     attachment: attachment ? attachment.filename : null,
   };
@@ -80,7 +90,7 @@ async function sendEmailViaBrevo({ apiKey, senderEmail, recipient, subject, html
  * atau fallback ke Gmail SMTP over SSL/TLS (port 465) menggunakan `node:tls`.
  *
  * @param {object} options
- * @param {string} [options.to]             - Email penerima (default: process.env.OWNER_EMAIL)
+ * @param {string} [options.to]             - Email penerima (default: process.env.OWNER_EMAIL, bisa dipisah koma)
  * @param {string} options.subject          - Subjek email
  * @param {string} options.html             - Isi email dalam format HTML
  * @param {object} [options.attachment]     - Lampiran file opsional { filename, contentBuffer, contentType }
@@ -90,10 +100,11 @@ function sendEmail({ to, subject, html, attachment }) {
   const smtpUser = (process.env.SMTP_USER || '').trim();
   const senderEmail = (process.env.EMAIL_FROM || smtpUser).trim();
   const smtpPass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
-  const recipient = (to || process.env.OWNER_EMAIL || '').trim();
+  const recipients = parseRecipients(to || process.env.OWNER_EMAIL);
+  const recipientLabel = recipients.join(', ');
 
   if (brevoApiKey) {
-    if (!senderEmail || !recipient) {
+    if (!senderEmail || recipients.length === 0) {
       return Promise.reject(
         new Error('Konfigurasi EMAIL_FROM/SMTP_USER atau OWNER_EMAIL belum lengkap di .env')
       );
@@ -101,14 +112,14 @@ function sendEmail({ to, subject, html, attachment }) {
     return sendEmailViaBrevo({
       apiKey: brevoApiKey,
       senderEmail,
-      recipient,
+      recipients,
       subject,
       html,
       attachment,
     });
   }
 
-  if (!smtpUser || !smtpPass || !recipient) {
+  if (!smtpUser || !smtpPass || recipients.length === 0) {
     return Promise.reject(
       new Error('Konfigurasi SMTP_USER, SMTP_PASS, atau OWNER_EMAIL belum lengkap di .env')
     );
@@ -126,6 +137,7 @@ function sendEmail({ to, subject, html, attachment }) {
     );
 
     let step = 0;
+    let rcptIndex = 0;
     let buffer = '';
 
     const sendLine = (line) => {
@@ -173,13 +185,20 @@ function sendEmail({ to, subject, html, attachment }) {
           sendLine(`MAIL FROM:<${smtpUser}>`);
         } else if (step === 5 && code === 250) {
           step = 6;
-          sendLine(`RCPT TO:<${recipient}>`);
+          rcptIndex = 0;
+          sendLine(`RCPT TO:<${recipients[rcptIndex]}>`);
         } else if (step === 6 && code === 250) {
-          step = 7;
-          sendLine('DATA');
+          rcptIndex += 1;
+          if (rcptIndex < recipients.length) {
+            sendLine(`RCPT TO:<${recipients[rcptIndex]}>`);
+          } else {
+            step = 7;
+            sendLine('DATA');
+          }
         } else if (step === 7 && code === 354) {
           step = 8;
           const encodedSubject = `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
+          const toHeader = recipients.map((email) => `<${email}>`).join(', ');
           const htmlBase64 = Buffer.from(html, 'utf8')
             .toString('base64')
             .replace(/(.{76})/g, '$1\r\n');
@@ -194,7 +213,7 @@ function sendEmail({ to, subject, html, attachment }) {
 
             message = [
               `From: "StockArt POS System" <${smtpUser}>`,
-              `To: <${recipient}>`,
+              `To: ${toHeader}`,
               `Subject: ${encodedSubject}`,
               'MIME-Version: 1.0',
               `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -218,7 +237,7 @@ function sendEmail({ to, subject, html, attachment }) {
           } else {
             message = [
               `From: "StockArt POS System" <${smtpUser}>`,
-              `To: <${recipient}>`,
+              `To: ${toHeader}`,
               `Subject: ${encodedSubject}`,
               'MIME-Version: 1.0',
               'Content-Type: text/html; charset=UTF-8',
@@ -237,7 +256,7 @@ function sendEmail({ to, subject, html, attachment }) {
           resolve({
             success: true,
             from: smtpUser,
-            to: recipient,
+            to: recipientLabel,
             subject,
             attachment: attachment ? attachment.filename : null,
           });

@@ -198,7 +198,7 @@ test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', as
     };
     process.env.BREVO_API_KEY = 'xkeysib-test-key';
     process.env.EMAIL_FROM = 'sender@stockart.local';
-    process.env.OWNER_EMAIL = 'owner@stockart.local';
+    process.env.OWNER_EMAIL = 'owner1@stockart.local, owner2@stockart.local';
 
     const calls = [];
     subtest.mock.method(globalThis, 'fetch', async (url, init) => {
@@ -222,7 +222,7 @@ test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', as
 
       assert.equal(result.success, true);
       assert.equal(result.from, 'sender@stockart.local');
-      assert.equal(result.to, 'owner@stockart.local');
+      assert.equal(result.to, 'owner1@stockart.local, owner2@stockart.local');
       assert.equal(result.attachment, 'laporan.pdf');
       assert.equal(calls.length, 1);
       assert.equal(calls[0].url, 'https://api.brevo.com/v3/smtp/email');
@@ -230,7 +230,10 @@ test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', as
 
       const body = JSON.parse(calls[0].init.body);
       assert.equal(body.sender.email, 'sender@stockart.local');
-      assert.equal(body.to[0].email, 'owner@stockart.local');
+      assert.deepEqual(body.to, [
+        { email: 'owner1@stockart.local' },
+        { email: 'owner2@stockart.local' },
+      ]);
       assert.equal(body.attachment[0].name, 'laporan.pdf');
       assert.equal(body.attachment[0].content, Buffer.from('pdf-bytes').toString('base64'));
     } finally {
