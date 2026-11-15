@@ -33,6 +33,17 @@ function parseRecipients(raw) {
 }
 
 /**
+ * Memeriksa apakah pengiriman email otomatis terkonfigurasi
+ * melalui Brevo HTTP API (`BREVO_API_KEY`) atau fallback SMTP (`SMTP_USER` + `SMTP_PASS`).
+ */
+function isEmailConfigured() {
+  const brevoApiKey = (process.env.BREVO_API_KEY || '').trim();
+  const smtpUser = (process.env.SMTP_USER || '').trim();
+  const smtpPass = (process.env.SMTP_PASS || '').replace(/\s+/g, '');
+  return Boolean(brevoApiKey || (smtpUser && smtpPass));
+}
+
+/**
  * Mengirim email melalui Brevo Transactional Email HTTP API (port 443 HTTPS).
  * Cocok untuk lingkungan cloud seperti Railway yang memblokir port SMTP (25/465/587).
  */
@@ -624,6 +635,7 @@ async function sendReportEmail({ periodeLabel, summary, topProducts, to, driveIn
 }
 
 module.exports = {
+  isEmailConfigured,
   sendEmail,
   sendLowStockAlertEmail,
   buildLowStockEmailSubject,
