@@ -502,7 +502,7 @@ test('E2E Logika Product Lengkap (CRUD, Filter, Restock, Soft/Hard Delete, Resto
     }
   });
 
-  await t.test('7. Trigger Otomatis Email Low Stock pada POST, PUT, & PATCH /restock (dan guard nonaktif)', async (subtest) => {
+  await t.test('7. Create/Update/Restock tidak lagi mengirim email ketengan, dan restock/update me-reset flag stok habis', async (subtest) => {
     const prevNodeTestContext = process.env.NODE_TEST_CONTEXT;
     const prevSmtpUser = process.env.SMTP_USER;
     const prevSmtpPass = process.env.SMTP_PASS;
@@ -533,7 +533,7 @@ test('E2E Logika Product Lengkap (CRUD, Filter, Restock, Soft/Hard Delete, Resto
       await waitTicks();
       strictAssert.equal(sentMessages.length, 0);
 
-      // POST stok <= stokMinimum -> kirim email otomatis
+      // POST stok <= stokMinimum -> tidak lagi kirim email otomatis (ditampung ke digest)
       const resPostLow = await api('/api/products', {
         method: 'POST',
         body: {
@@ -546,34 +546,38 @@ test('E2E Logika Product Lengkap (CRUD, Filter, Restock, Soft/Hard Delete, Resto
       });
       strictAssert.equal(resPostLow.status, 201);
       await waitTicks();
-      strictAssert.equal(sentMessages.length, 1);
+      strictAssert.equal(sentMessages.length, 0);
 
-      // PATCH /restock masih di bawah minimum (2 + 2 = 4 <= 5) -> kirim email otomatis
+      // Simulasikan produk pernah terkirim alert kritis stok habis
+      await ProductModel.updateOne(
+        { _id: resPostLow.json.data._id },
+        { $set: { stok: 0, stokHabisNotifiedAt: new Date() } }
+      );
+
+      // PATCH /restock -> tidak kirim email dan me-reset stokHabisNotifiedAt ke null
       const resRestockLow = await api(`/api/products/${resPostLow.json.data._id}/restock`, {
         method: 'PATCH',
         body: { jumlah: 2 },
       });
       strictAssert.equal(resRestockLow.status, 200);
+      strictAssert.equal(resRestockLow.json.data.stok, 2);
+      strictAssert.equal(resRestockLow.json.data.stokHabisNotifiedAt, null);
       await waitTicks();
-      strictAssert.equal(sentMessages.length, 2);
+      strictAssert.equal(sentMessages.length, 0);
 
-      // PUT mengubah produk menjadi nonaktif meski stok <= min -> TIDAK kirim email
-      const resPutInactive = await api(`/api/products/${resPostLow.json.data._id}`, {
-        method: 'PUT',
-        body: { aktif: false, stok: 1 },
-      });
-      strictAssert.equal(resPutInactive.status, 200);
-      await waitTicks();
-      strictAssert.equal(sentMessages.length, 2);
-
-      // PUT mengubah produk aktif dengan stok <= min -> kirim email otomatis
+      // PUT mengubah stok ke low -> tidak kirim email otomatis; bila stok > 0 juga reset flag habis
+      await ProductModel.updateOne(
+        { _id: resPostSafe.json.data._id },
+        { $set: { stokHabisNotifiedAt: new Date() } }
+      );
       const resPutLow = await api(`/api/products/${resPostSafe.json.data._id}`, {
         method: 'PUT',
         body: { stok: 1 },
       });
       strictAssert.equal(resPutLow.status, 200);
+      strictAssert.equal(resPutLow.json.data.stokHabisNotifiedAt, null);
       await waitTicks();
-      strictAssert.equal(sentMessages.length, 3);
+      strictAssert.equal(sentMessages.length, 0);
     } finally {
       if (prevNodeTestContext !== undefined) {
         process.env.NODE_TEST_CONTEXT = prevNodeTestContext;

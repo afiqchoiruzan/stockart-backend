@@ -413,6 +413,27 @@
 						"description": "Menambah stok produk secara aman dengan operasi $inc (Hanya role Pemilik)."
 					},
 					"response": []
+				},
+				{
+					"name": "Notify Low Stock Manual (Pemilik Only)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/products/low-stock/notify",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"products",
+								"low-stock",
+								"notify"
+							]
+						},
+						"description": "Mengirim email rekap semua produk yang stoknya <= stokMinimum secara manual ke OWNER_EMAIL (Hanya role Pemilik)."
+					},
+					"response": []
 				}
 			]
 		},
@@ -633,6 +654,62 @@
 							]
 						},
 						"description": "Laporan daftar produk dengan penjualan terbanyak (Hanya role Pemilik)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "5. Notifications (Jadwal Alert Low Stock)",
+			"item": [
+				{
+					"name": "Get Low Stock Alert Settings (Pemilik Only)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/notifications/low-stock/settings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"notifications",
+								"low-stock",
+								"settings"
+							]
+						},
+						"description": "Mengambil konfigurasi jadwal digest low stock (WIB), status eksekusi terakhir, dan toggle alert kritis stok = 0 (Hanya role Pemilik)."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Low Stock Alert Settings (Pemilik Only)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"digestFrequency\": \"weekly\",\n  \"digestTime\": \"07:00\",\n  \"digestWeekday\": 1,\n  \"digestDayOfMonth\": 1,\n  \"criticalAlertEnabled\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/notifications/low-stock/settings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"notifications",
+								"low-stock",
+								"settings"
+							]
+						},
+						"description": "Memperbarui pengaturan jadwal digest low stock (off/daily/weekly/monthly) dan alert kritis stok = 0 (Hanya role Pemilik)."
 					},
 					"response": []
 				}

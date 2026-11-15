@@ -303,16 +303,43 @@ function formatShortWibDate(date = new Date()) {
 
 const formatRp = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
 
+const DIGEST_FREQUENCY_LABELS = {
+  daily: 'Harian',
+  weekly: 'Mingguan',
+  monthly: 'Bulanan',
+};
+
+function getDigestFrequencyLabel(frequency) {
+  return DIGEST_FREQUENCY_LABELS[frequency] || 'Terjadwal';
+}
+
 /**
- * Membangun Subjek Email Dinamis tanpa emoji berdasarkan data produk low stock dari backend.
+ * Membangun Subjek Email Dinamis tanpa emoji berdasarkan data produk low stock dan konteks pengiriman.
  */
-function buildLowStockEmailSubject(products, now = new Date()) {
+function buildLowStockEmailSubject(products, now = new Date(), options = {}) {
   const items = Array.isArray(products) ? products : [];
+  const { context, frequency } = options || {};
   const habisCount = items.filter((p) => Number(p.stok) <= 0).length;
   const menipisCount = items.filter(
     (p) => Number(p.stok) > 0 && Number(p.stok) <= Number(p.stokMinimum ?? 0)
   ).length;
   const dateStr = formatShortWibDate(now);
+
+  if (context === 'digest') {
+    const freqLabel = getDigestFrequencyLabel(frequency);
+    if (habisCount > 0) {
+      return `[StockArt Rekap ${freqLabel}] ${habisCount} Produk Habis & ${menipisCount} Menipis Perlu Restock — ${dateStr}`;
+    }
+    return `[StockArt Rekap ${freqLabel}] ${items.length} Produk Stok Menipis Perlu Restock — ${dateStr}`;
+  }
+
+  if (context === 'critical') {
+    const firstName = items[0]?.nama || 'Produk';
+    if (items.length <= 1) {
+      return `[StockArt Kritis] Stok Habis: ${firstName} — ${dateStr}`;
+    }
+    return `[StockArt Kritis] Stok Habis: ${firstName} (+${items.length - 1} Produk Lainnya) — ${dateStr}`;
+  }
 
   if (habisCount > 0) {
     return `[StockArt Kritis] ${habisCount} Produk Habis & ${menipisCount} Menipis Perlu Restock — ${dateStr}`;
@@ -323,7 +350,10 @@ function buildLowStockEmailSubject(products, now = new Date()) {
 /**
  * Membangun Visual Header HTML (Monokrom + Aksen Merah khusus status low stock, tanpa emoji).
  */
-function buildLowStockEmailHeader(products, { wibDateTime, isCritical, habisCount, menipisCount }) {
+function buildLowStockEmailHeader(
+  products,
+  { wibDateTime, isCritical, habisCount, menipisCount, context, frequency }
+) {
   const badgeText = isCritical
     ? 'STATUS: STOK HABIS (KRITIS)'
     : 'STATUS: STOK MENIPIS';
@@ -333,13 +363,25 @@ function buildLowStockEmailHeader(products, { wibDateTime, isCritical, habisCoun
     ? 'background:#FEF2F2; color:#991B1B; border:1px solid #DC2626;'
     : 'background:#F5F5F5; color:#171717; border:1px solid #D4D4D4;';
 
+  const freqLabel = getDigestFrequencyLabel(frequency);
+  let eyebrowText = 'STOCKART POS &middot; INVENTORY ALERT';
+  let titleText = 'Peringatan Stok Produk Menipis';
+
+  if (context === 'digest') {
+    eyebrowText = `STOCKART POS &middot; REKAP ${freqLabel.toUpperCase()}`;
+    titleText = `Rekap ${freqLabel} Stok Produk Menipis`;
+  } else if (context === 'critical') {
+    eyebrowText = 'STOCKART POS &middot; PERINGATAN STOK HABIS';
+    titleText = 'Peringatan Kritis: Stok Produk Habis (0)';
+  }
+
   return `
     <div style="background:#FFFFFF; border-top:4px solid #000000; border-bottom:1px solid #E5E5E5; padding:24px 24px 20px;">
       <table role="presentation" style="width:100%; border-collapse:collapse; margin-bottom:12px;">
         <tr>
           <td style="vertical-align:middle;">
             <span style="font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#525252;">
-              STOCKART POS &middot; INVENTORY ALERT
+              ${eyebrowText}
             </span>
           </td>
           <td style="text-align:right; vertical-align:middle;">
@@ -353,7 +395,7 @@ function buildLowStockEmailHeader(products, { wibDateTime, isCritical, habisCoun
         Stockart
       </div>
       <h1 style="margin:0 0 6px; font-size:22px; font-weight:700; color:#000000; letter-spacing:-0.02em; line-height:1.25;">
-        Peringatan Stok Produk Menipis
+        ${titleText}
       </h1>
       <p style="margin:0; font-size:12px; color:#525252; line-height:1.5;">
         <strong style="color:#171717;">${wibDateTime}</strong>
@@ -365,7 +407,7 @@ function buildLowStockEmailHeader(products, { wibDateTime, isCritical, habisCoun
  * Membangun Body Email (Tabel Rincian Produk sesuai skema models/Product.js)
  * dengan palet monokrom bersih dan warna merah khusus untuk penanda item low stock.
  */
-function buildLowStockEmailBody(products, { to, wibDateTime }) {
+function buildLowStockEmailBody(products, { to, wibDateTime, context, frequency }) {
   const items = Array.isArray(products) ? [...products] : [];
 
   // Urutkan item dari stok terkecil (stok 0 paling atas)
@@ -435,13 +477,30 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
     })
     .join('');
 
+  const recipientLabel = to || process.env.OWNER_EMAIL;
+  const freqLabel = getDigestFrequencyLabel(frequency).toLowerCase();
+
+  let introText = `Berikut ringkasan produk aktif pada katalog <strong>StockArt POS</strong> yang perlu segera diperhatikan pada pengecekan <strong>${wibDateTime}</strong>:`;
+  let footerText = `Notifikasi dikirim otomatis oleh server <strong style="color:#171717;">StockArt Backend</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> saat pengecekan stok dilakukan.`;
+
+  if (context === 'digest') {
+    introText = `Berikut rekap ${freqLabel} seluruh produk aktif pada katalog <strong>StockArt POS</strong> dengan stok di bawah atau sama dengan batas minimum pada <strong>${wibDateTime}</strong>:`;
+    footerText = `Notifikasi rekap ${freqLabel} dikirim otomatis oleh server <strong style="color:#171717;">StockArt Backend</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> sesuai jadwal alert stok yang aktif.`;
+  } else if (context === 'critical') {
+    introText = `Produk berikut baru saja menyentuh <strong>stok 0 (habis)</strong> setelah transaksi kasir pada <strong>${wibDateTime}</strong> dan perlu segera di-restock:`;
+    footerText = `Notifikasi kritis dikirim otomatis oleh server <strong style="color:#171717;">StockArt Backend</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> karena transaksi kasir membuat stok produk mencapai 0.`;
+  } else if (context === 'manual') {
+    introText = `Berikut rekap produk aktif pada katalog <strong>StockArt POS</strong> yang perlu segera di-restock berdasarkan pengecekan manual pada <strong>${wibDateTime}</strong>:`;
+    footerText = `Notifikasi dikirim secara manual melalui dashboard <strong style="color:#171717;">StockArt POS</strong> ke <strong style="color:#171717;">${recipientLabel}</strong>.`;
+  }
+
   return `
     <div style="padding:24px; background:#FFFFFF; color:#171717;">
       <p style="font-size:14px; margin:0 0 8px; color:#000000; line-height:1.5;">
         Halo <strong>Owner Stockart</strong>,
       </p>
       <p style="font-size:13px; line-height:1.6; color:#404040; margin:0 0 20px;">
-        Berikut ringkasan produk aktif pada katalog <strong>StockArt POS</strong> yang perlu segera diperhatikan pada pengecekan <strong>${wibDateTime}</strong>:
+        ${introText}
       </p>
 
       <!-- Tabel Rincian Produk Sesuai Skema Backend -->
@@ -473,7 +532,7 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
 
       <!-- Footer Info -->
       <div style="border-top:1px solid #E5E5E5; padding-top:14px; margin-top:20px; font-size:11px; color:#525252; line-height:1.5;">
-        Notifikasi dikirim otomatis oleh server <strong style="color:#171717;">StockArt Backend</strong> ke <strong style="color:#171717;">${to || process.env.OWNER_EMAIL}</strong> saat transaksi kasir atau pembaruan inventaris memicu stok di bawah batas minimum.
+        ${footerText}
       </div>
     </div>`;
 }
@@ -481,33 +540,38 @@ function buildLowStockEmailBody(products, { to, wibDateTime }) {
 /**
  * Mengirim email peringatan stok menipis (Low Stock Alert) ke Email Owner.
  */
-async function sendLowStockAlertEmail(products, customRecipient) {
+async function sendLowStockAlertEmail(products, customRecipient, options = {}) {
   const items = Array.isArray(products) ? products : [];
   if (items.length === 0) {
     return { success: false, message: 'Tidak ada produk yang perlu dilaporkan' };
   }
 
+  const { context, frequency } = options || {};
   const now = new Date();
   const wibDateTime = formatWibDate(now);
   const habisCount = items.filter((p) => Number(p.stok) <= 0).length;
   const menipisCount = items.filter(
     (p) => Number(p.stok) > 0 && Number(p.stok) <= Number(p.stokMinimum ?? 0)
   ).length;
-  const isCritical = habisCount > 0;
+  const isCritical = context === 'critical' || habisCount > 0;
 
   const recipient = (customRecipient || process.env.OWNER_EMAIL || '').trim();
-  const subject = buildLowStockEmailSubject(items, now);
+  const subject = buildLowStockEmailSubject(items, now, { context, frequency });
 
   const headerHtml = buildLowStockEmailHeader(items, {
     wibDateTime,
     isCritical,
     habisCount,
     menipisCount,
+    context,
+    frequency,
   });
 
   const bodyHtml = buildLowStockEmailBody(items, {
     to: recipient,
     wibDateTime,
+    context,
+    frequency,
   });
 
   const fullHtml = `<!DOCTYPE html>

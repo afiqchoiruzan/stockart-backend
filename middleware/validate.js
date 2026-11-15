@@ -11,6 +11,8 @@
 
 'use strict';
 
+const { validateSettingsPayload } = require('../services/lowStockSettingsService');
+
 // ─── Helpers internal ────────────────────────────────────────────────────────
 
 const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
@@ -176,6 +178,12 @@ const restockRules = (body) => {
   return errors;
 };
 
+/**
+ * PUT /api/notifications/low-stock/settings
+ * { digestFrequency?, digestTime?, digestWeekday?, digestDayOfMonth?, criticalAlertEnabled? }
+ */
+const lowStockSettingsRules = (body) => validateSettingsPayload(body).errors;
+
 // ─── Middleware pabrik ────────────────────────────────────────────────────────
 
 /**
@@ -207,4 +215,5 @@ module.exports = {
   productUpdateRules,
   transactionRules,
   restockRules,
+  lowStockSettingsRules,
 };
