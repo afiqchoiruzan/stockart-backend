@@ -13,7 +13,7 @@ const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const StockEntry = require('../models/StockEntry');
 const NotificationSetting = require('../models/NotificationSetting');
-const { getReportSummary } = require('../services/reportService');
+const { getReportSummary, buildRevenueChart, buildReportPdf } = require('../services/reportService');
 const { recordStockEntry } = require('../services/stockEntryService');
 const {
   REPORT_SETTINGS_KEY,
@@ -138,6 +138,33 @@ test('Laporan otomatis & ringkasan: barang masuk, produk terjual, scheduler, dan
     assert.equal(summary.totalMasuk, 15);
   });
 
+  await t.test('grafik & PDF laporan: per jam untuk 1 hari, per hari untuk rentang', async () => {
+    // Transaksi selesai di atas: 16 Nov 2026 09:00 WIB, Rp45.000
+    const hourly = await buildRevenueChart({ tanggalMulai: '2026-11-16', tanggalAkhir: '2026-11-16' });
+    assert.equal(hourly.title, 'Omzet per Jam');
+    assert.deepEqual(hourly.points, [{ label: '09', omzet: 45000 }]);
+
+    const weekly = await buildRevenueChart({ tanggalMulai: '2026-11-10', tanggalAkhir: '2026-11-16' });
+    assert.equal(weekly.title, 'Omzet per Hari');
+    assert.equal(weekly.points.length, 7);
+    assert.deepEqual(weekly.points[0], { label: 'Sel', sublabel: '10/11', omzet: 0 });
+    assert.deepEqual(weekly.points[6], { label: 'Sen', sublabel: '16/11', omzet: 45000 });
+
+    const longRange = await buildRevenueChart({ tanggalMulai: '2026-09-01', tanggalAkhir: '2026-11-16' });
+    assert.equal(longRange.points.length, 31);
+    assert.ok(longRange.note);
+
+    const { buffer, fileName } = await buildReportPdf({ tanggalMulai: '2026-11-10', tanggalAkhir: '2026-11-16' });
+    assert.equal(fileName, 'Laporan_Stockart_2026-11-10_2026-11-16.pdf');
+    assert.equal(buffer.subarray(0, 8).toString('latin1'), '%PDF-1.4');
+    assert.ok(buffer.toString('latin1').includes('(Omzet per Hari)') || buffer.toString('latin1').includes('(OMZET PER HARI)'));
+
+    await assert.rejects(
+      () => buildReportPdf({ tanggalMulai: '2026-11-17', tanggalAkhir: '2026-11-16' }),
+      { statusCode: 400 }
+    );
+  });
+
   await t.test('scheduler: off tidak mengirim, slot jatuh tempo terkirim sekali dengan rentang benar', async () => {
     const calls = [];
     const send = async (payload) => {
@@ -252,5 +279,25 @@ test('Laporan otomatis & ringkasan: barang masuk, produk terjual, scheduler, dan
     assert.equal(updated.status, 200, JSON.stringify(updated.json));
     assert.equal(updated.json.data.digestFrequency, 'weekly');
     assert.equal(updated.json.data.saveToDrive, true);
+
+    // Unduh PDF laporan: hanya pemilik, respons berupa file PDF
+    const pdfUrl = `http://127.0.0.1:${server.address().port}/api/reports/pdf?tanggalMulai=2026-11-10&tanggalAkhir=2026-11-16`;
+    const kasirPdf = await fetch(pdfUrl, { headers: { Authorization: `Bearer ${kasirToken}`, Connection: 'close' } });
+    assert.equal(kasirPdf.status, 403);
+    await kasirPdf.arrayBuffer();
+
+    const ownerPdf = await fetch(pdfUrl, { headers: { Authorization: `Bearer ${ownerToken}`, Connection: 'close' } });
+    assert.equal(ownerPdf.status, 200);
+    assert.equal(ownerPdf.headers.get('content-type'), 'application/pdf');
+    assert.match(ownerPdf.headers.get('content-disposition'), /Laporan_Stockart_2026-11-10_2026-11-16\.pdf/);
+    const pdfBytes = Buffer.from(await ownerPdf.arrayBuffer());
+    assert.equal(pdfBytes.subarray(0, 5).toString('latin1'), '%PDF-');
+
+    const badPdf = await fetch(
+      `http://127.0.0.1:${server.address().port}/api/reports/pdf?tanggalMulai=2026-02-30`,
+      { headers: { Authorization: `Bearer ${ownerToken}`, Connection: 'close' } }
+    );
+    assert.equal(badPdf.status, 400);
+    await badPdf.arrayBuffer();
   });
 });

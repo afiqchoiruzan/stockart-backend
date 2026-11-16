@@ -4,7 +4,8 @@ const {
     getSummary,
     getRevenue,
     getTopProducts,
-    sendReportToOwner
+    sendReportToOwner,
+    downloadReportPdf
 } = require('../controllers/reportController');
 
 const { protect, authorize } = require('../middleware/authMiddleware');
@@ -15,6 +16,7 @@ const router = express.Router();
 router.get('/summary', protect, authorize('pemilik'), getSummary);
 router.get('/revenue', protect, authorize('pemilik'), getRevenue);
 router.get('/top-products', protect, authorize('pemilik'), getTopProducts);
+router.get('/pdf', protect, authorize('pemilik'), downloadReportPdf);
 router.post('/send-email', protect, authorize('pemilik'), sendReportToOwner);
 
 module.exports = router;

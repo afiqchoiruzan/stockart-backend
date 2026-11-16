@@ -232,6 +232,16 @@ curl -X GET "http://localhost:5000/api/reports/revenue?interval=jam&tanggalMulai
   -H "Authorization: Bearer $TOKEN"
 ```
 
+### Download Report PDF
+
+PDF yang sama dengan lampiran email laporan: ringkasan, grafik omzet (per jam bila rentang 1 hari, per hari bila lebih; maks. 31 hari terakhir), dan 5 produk terlaris.
+
+```bash
+curl -X GET "http://localhost:5000/api/reports/pdf?tanggalMulai=2026-11-10&tanggalAkhir=2026-11-16" \
+  -H "Authorization: Bearer $TOKEN" \
+  -o Laporan_Stockart.pdf
+```
+
 ### Get Top Products (Produk Terlaris)
 
 ```bash
