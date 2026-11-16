@@ -281,6 +281,8 @@ curl -X PATCH http://localhost:5000/api/transactions/6aaa0956c41db778cffd8820/ca
 
 Respons berisi `totalProduk`, `totalTransaksi`, `totalOmzet`, `totalTerjual` (jumlah unit terjual dari transaksi selesai), dan `totalMasuk` (jumlah unit barang masuk dari produk baru & restock). Riwayat barang masuk mulai tercatat sejak fitur ini aktif.
 
+Laba kotor: `totalLaba` = pendapatan - `totalModal`. Modal memakai snapshot harga beli yang disimpan saat checkout (Tunai maupun QRIS); transaksi lama tanpa snapshot memakai harga beli produk saat ini, dan `labaEstimasi` bernilai `true` bila ada item seperti itu. Snapshot harga beli tidak pernah dikirim di respons transaksi. `GET /api/reports/top-products` juga menyertakan `totalLaba` per produk.
+
 ```bash
 curl -X GET "http://localhost:5000/api/reports/summary?tanggalMulai=2026-11-10&tanggalAkhir=2026-11-16" \
   -H "Authorization: Bearer $TOKEN"

@@ -25,11 +25,25 @@ const transactionItemSchema = new mongoose.Schema(
             required: [true, 'Subtotal harus diisi'],
             min: [0, 'Subtotal tidak boleh kurang dari 0'],
         },
+        // Snapshot harga beli saat checkout untuk laporan laba kotor.
+        // Rahasia owner: tidak ikut query biasa dan dihapus dari setiap respons API.
+        hargaBeli: {
+            type: Number,
+            min: [0, 'Harga beli tidak boleh kurang dari 0'],
+            select: false,
+        },
     },
     {
         _id: false,
     }
 );
+
+const hideHargaBeli = (doc, ret) => {
+    delete ret.hargaBeli;
+    return ret;
+};
+transactionItemSchema.set('toJSON', { transform: hideHargaBeli });
+transactionItemSchema.set('toObject', { transform: hideHargaBeli });
 
 const transactionSchema = new mongoose.Schema(
     {

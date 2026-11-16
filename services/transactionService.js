@@ -8,7 +8,8 @@ const paymentService = require('./paymentService');
 const fail = (statusCode, message) => Object.assign(new Error(message), { statusCode });
 const validId = (id) => typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id);
 
-async function calculateTransactionDetail(detailBarang, session = null) {
+// includeCost: sertakan snapshot hargaBeli (hanya untuk disimpan di transaksi, jangan dikirim ke klien)
+async function calculateTransactionDetail(detailBarang, session = null, { includeCost = false } = {}) {
   const errors = transactionRules({ detailBarang });
   if (errors.length) throw fail(400, errors.join('; '));
   const quantities = new Map();
@@ -33,14 +34,15 @@ async function calculateTransactionDetail(detailBarang, session = null) {
       throw fail(400, 'Total harga di luar batas yang didukung');
     }
     detail.push({ produk: product._id, namaProduk: product.nama, kodeProduk: product.kodeProduk,
-      jumlah, hargaSatuan: product.hargaJual, subtotal });
+      jumlah, hargaSatuan: product.hargaJual, subtotal,
+      ...(includeCost && Number.isFinite(product.hargaBeli) ? { hargaBeli: product.hargaBeli } : {}) });
   }
   return { detailBarang: detail, totalHarga };
 }
 
 async function checkout(detailBarang, kasir) {
   return mongoose.connection.transaction(async (session) => {
-    const calculated = await calculateTransactionDetail(detailBarang, session);
+    const calculated = await calculateTransactionDetail(detailBarang, session, { includeCost: true });
     // Sequential writes within one session; the predicate also guards concurrent checkout.
     for (const item of calculated.detailBarang) {
       const result = await Product.updateOne(
@@ -90,7 +92,7 @@ async function voidTransaction(id, userId) {
  * @returns {Promise<{ transaction: import('mongoose').Document, qrImageUrl: string|null }>}
  */
 async function createQrisTransaction(detailBarang, kasir) {
-  const calculated = await calculateTransactionDetail(detailBarang);
+  const calculated = await calculateTransactionDetail(detailBarang, null, { includeCost: true });
   if (!Number.isSafeInteger(calculated.totalHarga) || calculated.totalHarga < 1) {
     throw fail(400, 'Total transaksi QRIS harus bilangan bulat rupiah minimal 1');
   }

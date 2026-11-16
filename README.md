@@ -278,7 +278,7 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 | | `GET` | `/api/transactions/:id/status` | Kasir / Pemilik | Status pembayaran untuk polling QRIS (hanya membaca) |
 | **Pembayaran** | `POST` | `/api/payments/qris` | Kasir / Pemilik | Buat transaksi QRIS pending + QR dinamis Midtrans (sandbox) |
 | | `POST` | `/api/payments/webhook` | Midtrans (signature) | Notifikasi Midtrans; satu-satunya jalan status menjadi *paid* |
-| **Laporan** | `GET` | `/api/reports/summary` | Pemilik | Ringkasan omzet, transaksi, produk, produk terjual (`totalTerjual`), dan barang masuk (`totalMasuk`) |
+| **Laporan** | `GET` | `/api/reports/summary` | Pemilik | Ringkasan omzet, laba kotor (`totalLaba`), transaksi, produk, produk terjual (`totalTerjual`), dan barang masuk (`totalMasuk`) |
 | | `GET` | `/api/reports/revenue` | Pemilik | Data pendapatan per tanggal WIB untuk grafik tren (`?interval=jam` untuk per jam) |
 | | `GET` | `/api/reports/top-products` | Pemilik | 5 produk terlaris berdasarkan kuantitas & omzet |
 | | `GET` | `/api/reports/pdf` | Pemilik | Unduh PDF laporan periode tertentu (ringkasan, grafik omzet, produk terlaris; sama dengan lampiran email) |

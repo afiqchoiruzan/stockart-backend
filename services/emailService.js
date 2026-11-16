@@ -739,6 +739,10 @@ function buildReportHtml({
 
   const summaryRows = [
     ['Total Omzet', `<strong style="color:#000000; font-size:14px;">${formatRp(data.totalOmzet)}</strong>`],
+    [
+      data.labaEstimasi ? 'Laba Kotor <span style="font-size:11px; color:#525252;">(estimasi)</span>' : 'Laba Kotor',
+      `<strong style="color:#000000; font-size:14px;">${formatRp(data.totalLaba)}</strong>`,
+    ],
     ['Transaksi Selesai', `<strong style="color:#171717;">${formatUnit(data.totalTransaksi)}</strong> <span style="font-size:11px; color:#525252;">struk</span>`],
     ['Produk Terjual', `<strong style="color:#171717;">${formatUnit(data.totalTerjual)}</strong> <span style="font-size:11px; color:#525252;">unit</span>`],
     ['Barang Masuk', `<strong style="color:#171717;">${formatUnit(data.totalMasuk)}</strong> <span style="font-size:11px; color:#525252;">unit</span>`],

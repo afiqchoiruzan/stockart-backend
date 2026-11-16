@@ -13,7 +13,13 @@ const Product = require('../models/Product');
 const Transaction = require('../models/Transaction');
 const StockEntry = require('../models/StockEntry');
 const NotificationSetting = require('../models/NotificationSetting');
-const { getReportSummary, buildRevenueChart, buildReportPdf } = require('../services/reportService');
+const {
+  getReportSummary,
+  getTopProducts,
+  buildRevenueChart,
+  buildReportPdf,
+} = require('../services/reportService');
+const { checkout, calculateTransactionDetail } = require('../services/transactionService');
 const { recordStockEntry } = require('../services/stockEntryService');
 const {
   REPORT_SETTINGS_KEY,
@@ -136,6 +142,52 @@ test('Laporan otomatis & ringkasan: barang masuk, produk terjual, scheduler, dan
     assert.equal(summary.totalOmzet, 45000);
     assert.equal(summary.totalTerjual, 3);
     assert.equal(summary.totalMasuk, 15);
+    // Transaksi lama tanpa snapshot: modal memakai harga beli produk saat ini (3 x 12.000)
+    assert.equal(summary.totalModal, 36000);
+    assert.equal(summary.totalLaba, 9000);
+    assert.equal(summary.labaEstimasi, true);
+  });
+
+  await t.test('laba kotor: snapshot harga beli saat checkout, tersembunyi dari respons', async () => {
+    const owner = await User.findOne({ role: 'pemilik' });
+    const product = await Product.create({ nama: 'Kopi Sachet', hargaBeli: 1500, hargaJual: 2500, stok: 50 });
+
+    // Draft (dilihat kasir) tidak membawa harga beli
+    const draft = await calculateTransactionDetail([{ produk: String(product._id), jumlah: 1 }]);
+    assert.equal('hargaBeli' in draft.detailBarang[0], false);
+
+    const trx = await checkout([{ produk: String(product._id), jumlah: 4 }], owner._id);
+    assert.equal(JSON.stringify(trx).includes('hargaBeli'), false);
+    assert.equal(JSON.stringify(trx.toObject()).includes('hargaBeli'), false);
+
+    const raw = await Transaction.collection.findOne({ _id: trx._id });
+    assert.equal(raw.detailBarang[0].hargaBeli, 1500);
+    const fetched = await Transaction.findById(trx._id).lean();
+    assert.equal(fetched.detailBarang[0].hargaBeli, undefined);
+
+    // Harga beli naik setelah checkout: laba tetap memakai snapshot (4 x (2.500 - 1.500))
+    await Product.updateOne({ _id: product._id }, { $set: { hargaBeli: 2000 } });
+    await Transaction.collection.updateOne({ _id: trx._id }, { $set: { createdAt: new Date('2026-11-20T03:00:00Z') } });
+
+    const range = { tanggalMulai: '2026-11-20', tanggalAkhir: '2026-11-20' };
+    const summary = await getReportSummary(range);
+    assert.equal(summary.totalOmzet, 10000);
+    assert.equal(summary.totalModal, 6000);
+    assert.equal(summary.totalLaba, 4000);
+    assert.equal(summary.labaEstimasi, false);
+
+    const top = await getTopProducts(range);
+    assert.equal(top.length, 1);
+    assert.equal(top[0].namaProduk, 'Kopi Sachet');
+    assert.equal(top[0].totalLaba, 4000);
+    assert.equal('modalSnapshot' in top[0], false);
+
+    // Rentang kosong: semua nol, bukan estimasi
+    const empty = await getReportSummary({ tanggalMulai: '2026-12-01', tanggalAkhir: '2026-12-01' });
+    assert.deepEqual(
+      [empty.totalLaba, empty.totalModal, empty.totalTerjual, empty.labaEstimasi],
+      [0, 0, 0, false]
+    );
   });
 
   await t.test('grafik & PDF laporan: per jam untuk 1 hari, per hari untuk rentang', async () => {
