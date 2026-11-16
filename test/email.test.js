@@ -10,6 +10,8 @@ const {
   buildLowStockEmailSubject,
   buildLowStockEmailHeader,
   buildLowStockEmailBody,
+  buildReportHtml,
+  buildReportEmailSubject,
 } = require('../services/emailService');
 const Product = require('../models/Product');
 const NotificationSetting = require('../models/NotificationSetting');
@@ -499,4 +501,64 @@ test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', as
       }
     }
   });
+});
+
+test('Email laporan: gaya monokrom tanpa emoji, sama seperti email rekap stok', () => {
+  const summary = {
+    totalProduk: 55,
+    totalTransaksi: 6,
+    totalOmzet: 284500,
+    totalTerjual: 16,
+    totalMasuk: 20,
+  };
+  const topProducts = [
+    { produkId: 'p1', namaProduk: 'Minyak Bimoli 2L', totalTerjual: 5, totalPendapatan: 150000 },
+  ];
+
+  const manual = buildReportHtml({
+    periodeLabel: '2026-11-10 s/d 2026-11-16',
+    summary,
+    topProducts,
+    to: 'owner@example.com',
+    driveInfo: {
+      uploaded: true,
+      fileName: 'Laporan.pdf',
+      fileUrl: 'https://drive.example/file',
+      folderUrl: 'https://drive.example/folder',
+    },
+  });
+  assert.ok(!EMOJI_REGEX.test(manual), 'HTML laporan tidak boleh mengandung emoji');
+  assert.ok(manual.includes('border-top:4px solid #000000'));
+  assert.ok(manual.includes('Laporan Penjualan & Stok'));
+  assert.ok(manual.includes('Halo <strong>Owner Stockart</strong>'));
+  assert.ok(manual.includes('10 Nov 2026 s/d 16 Nov 2026'));
+  assert.ok(manual.includes('Rp 284.500'));
+  assert.ok(manual.includes('Minyak Bimoli 2L'));
+  assert.ok(manual.includes('Buka Halaman Laporan'));
+  assert.ok(manual.includes('/owner/laporan'));
+  assert.ok(manual.includes('dikirim secara manual'));
+  assert.ok(manual.includes('https://drive.example/file'));
+
+  const scheduled = buildReportHtml({
+    periodeLabel: '2026-11-15 s/d 2026-11-15',
+    summary,
+    topProducts: [],
+    context: 'scheduled',
+    frequency: 'daily',
+  });
+  assert.ok(scheduled.includes('Laporan Harian Penjualan'));
+  assert.ok(scheduled.includes('dikirim otomatis'));
+  assert.ok(scheduled.includes('Belum ada transaksi selesai pada periode ini'));
+
+  const subjectManual = buildReportEmailSubject('2026-11-10 s/d 2026-11-16');
+  assert.equal(
+    subjectManual,
+    '[Stockart Laporan] Laporan Penjualan & Stok — 10 Nov 2026 s/d 16 Nov 2026'
+  );
+  const subjectScheduled = buildReportEmailSubject('2026-11-15 s/d 2026-11-15', {
+    context: 'scheduled',
+    frequency: 'weekly',
+  });
+  assert.ok(subjectScheduled.startsWith('[Stockart Laporan Mingguan]'));
+  assert.ok(!EMOJI_REGEX.test(subjectManual) && !EMOJI_REGEX.test(subjectScheduled));
 });

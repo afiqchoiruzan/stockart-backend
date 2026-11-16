@@ -166,6 +166,8 @@ async function runReportIfDue({
     await send({
       ...period,
       saveToDrive: claimed.saveToDrive !== false,
+      context: 'scheduled',
+      frequency: claimed.digestFrequency,
     });
 
     await NotificationSetting.updateOne(

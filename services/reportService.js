@@ -199,8 +199,16 @@ function buildPeriodeLabel({ tanggalMulai, tanggalAkhir } = {}) {
 /**
  * Menyusun laporan lalu mengirimkannya ke email owner.
  * Salinan PDF diunggah ke Google Drive bila saveToDrive aktif dan GDRIVE_WEBHOOK_URL diatur.
+ * context: "manual" (tombol kirim sekarang) atau "scheduled" (laporan otomatis).
  */
-async function sendReport({ tanggalMulai, tanggalAkhir, email, saveToDrive = true } = {}) {
+async function sendReport({
+  tanggalMulai,
+  tanggalAkhir,
+  email,
+  saveToDrive = true,
+  context = 'manual',
+  frequency,
+} = {}) {
   const range = { tanggalMulai, tanggalAkhir };
   // Validasi rentang lebih dulu agar kesalahan input langsung ditolak (400)
   buildDateFilter(tanggalMulai, tanggalAkhir);
@@ -211,7 +219,14 @@ async function sendReport({ tanggalMulai, tanggalAkhir, email, saveToDrive = tru
   ]);
 
   const periodeLabel = buildPeriodeLabel(range);
-  const htmlContent = buildReportHtml({ periodeLabel, summary, topProducts, to: email });
+  const htmlContent = buildReportHtml({
+    periodeLabel,
+    summary,
+    topProducts,
+    to: email,
+    context,
+    frequency,
+  });
 
   let driveInfo = { uploaded: false };
   if (saveToDrive && process.env.GDRIVE_WEBHOOK_URL) {
@@ -229,6 +244,8 @@ async function sendReport({ tanggalMulai, tanggalAkhir, email, saveToDrive = tru
     topProducts,
     to: email,
     driveInfo,
+    context,
+    frequency,
   });
 
   return {

@@ -570,91 +570,206 @@ async function sendLowStockAlertEmail(products, customRecipient, options = {}) {
   });
 }
 
+const REPORT_FREQUENCY_LABELS = {
+  daily: 'Harian',
+  weekly: 'Mingguan',
+  monthly: 'Bulanan',
+};
+
 /**
- * Membangun HTML Laporan Keuangan & Penjualan Produk.
+ * Mengubah label periode "YYYY-MM-DD s/d YYYY-MM-DD" menjadi format tanggal Indonesia
+ * (mis. "10 Nov 2026 s/d 16 Nov 2026"). Label lain dikembalikan apa adanya.
  */
-function buildReportHtml({ periodeLabel, summary, topProducts, to, driveInfo }) {
-  const formatRp = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+function formatReportPeriodeLabel(periodeLabel) {
+  return String(periodeLabel || '').replace(/\d{4}-\d{2}-\d{2}/g, (dateKey) =>
+    formatShortWibDate(new Date(`${dateKey}T00:00:00+07:00`))
+  );
+}
+
+/**
+ * Membangun Subjek Email Laporan tanpa emoji, mengikuti pola email rekap stok.
+ */
+function buildReportEmailSubject(periodeLabel, { context, frequency } = {}) {
+  const periode = formatReportPeriodeLabel(periodeLabel);
+  if (context === 'scheduled') {
+    const freqLabel = REPORT_FREQUENCY_LABELS[frequency] || 'Terjadwal';
+    return `[Stockart Laporan ${freqLabel}] Laporan Penjualan & Stok — ${periode}`;
+  }
+  return `[Stockart Laporan] Laporan Penjualan & Stok — ${periode}`;
+}
+
+/**
+ * Membangun HTML Laporan Penjualan & Stok dengan gaya monokrom yang sama
+ * seperti email rekap stok menipis (header Stockart, sapaan, tabel, tombol CTA).
+ */
+function buildReportHtml({
+  periodeLabel,
+  summary,
+  topProducts,
+  to,
+  driveInfo,
+  context,
+  frequency,
+  generatedAt = new Date(),
+}) {
+  const data = summary || {};
+  const items = Array.isArray(topProducts) ? topProducts : [];
+  const periode = formatReportPeriodeLabel(periodeLabel);
+  const wibDateTime = formatWibDate(generatedAt);
+  const freqLabel = REPORT_FREQUENCY_LABELS[frequency];
+  const titleText =
+    context === 'scheduled' && freqLabel
+      ? `Laporan ${freqLabel} Penjualan & Stok`
+      : 'Laporan Penjualan & Stok';
+  const recipientLabel = to || process.env.OWNER_EMAIL;
+
+  const frontendBase = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+    .split(',')[0]
+    .trim()
+    .replace(/\/+$/, '');
+  const reportUrl = `${frontendBase}/owner/laporan`;
+
+  const formatUnit = (n) => Number(n || 0).toLocaleString('id-ID');
+
+  const summaryRows = [
+    ['Total Omzet', `<strong style="color:#000000; font-size:14px;">${formatRp(data.totalOmzet)}</strong>`],
+    ['Transaksi Selesai', `<strong style="color:#171717;">${formatUnit(data.totalTransaksi)}</strong> <span style="font-size:11px; color:#525252;">struk</span>`],
+    ['Produk Terjual', `<strong style="color:#171717;">${formatUnit(data.totalTerjual)}</strong> <span style="font-size:11px; color:#525252;">unit</span>`],
+    ['Barang Masuk', `<strong style="color:#171717;">${formatUnit(data.totalMasuk)}</strong> <span style="font-size:11px; color:#525252;">unit</span>`],
+    ['Katalog Aktif', `<strong style="color:#171717;">${formatUnit(data.totalProduk)}</strong> <span style="font-size:11px; color:#525252;">produk</span>`],
+  ]
+    .map(
+      ([label, value], idx) => `
+        <tr style="background:${idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA'};">
+          <td style="padding:10px 12px; border-bottom:1px solid #E5E5E5; font-size:12px; color:#404040;">${label}</td>
+          <td style="padding:10px 12px; border-bottom:1px solid #E5E5E5; font-size:13px; text-align:right; font-variant-numeric:tabular-nums;">${value}</td>
+        </tr>`
+    )
+    .join('');
 
   const topRows =
-    topProducts && topProducts.length > 0
-      ? topProducts
-          .map(
-            (item, idx) => `
-          <tr>
-            <td style="padding:8px 12px; border-bottom:1px solid #EDD5BC;">#${idx + 1}</td>
-            <td style="padding:8px 12px; border-bottom:1px solid #EDD5BC;"><strong>${item.namaProduk}</strong></td>
-            <td style="padding:8px 12px; border-bottom:1px solid #EDD5BC;">${item.totalTerjual} unit</td>
-            <td style="padding:8px 12px; border-bottom:1px solid #EDD5BC;">${formatRp(item.totalPendapatan)}</td>
-          </tr>`
-          )
+    items.length > 0
+      ? items
+          .map((item, idx) => {
+            const rowBg = idx % 2 === 0 ? '#FFFFFF' : '#FAFAFA';
+            return `
+        <tr style="background:${rowBg};">
+          <td style="padding:12px 10px; border-bottom:1px solid #E5E5E5; font-size:12px; color:#525252; text-align:center; font-variant-numeric:tabular-nums;">
+            ${idx + 1}
+          </td>
+          <td style="padding:12px 10px; border-bottom:1px solid #E5E5E5; font-size:13px;">
+            <strong style="color:#000000;">${item.namaProduk}</strong>
+          </td>
+          <td style="padding:12px 10px; border-bottom:1px solid #E5E5E5; font-size:13px; text-align:center; font-variant-numeric:tabular-nums;">
+            <strong style="color:#171717; font-size:14px;">${formatUnit(item.totalTerjual)}</strong>
+            <span style="font-size:11px; color:#525252; margin-left:2px;">unit</span>
+          </td>
+          <td style="padding:12px 10px; border-bottom:1px solid #E5E5E5; font-size:12px; font-family:Consolas, monospace; color:#171717; text-align:right; font-variant-numeric:tabular-nums;">
+            <strong>${formatRp(item.totalPendapatan)}</strong>
+          </td>
+        </tr>`;
+          })
           .join('')
-      : `<tr><td colspan="4" style="padding:12px; text-align:center; color:#755E52;">Belum ada transaksi pada periode ini</td></tr>`;
+      : `
+        <tr>
+          <td colspan="4" style="padding:16px 10px; text-align:center; font-size:12px; color:#525252;">
+            Belum ada transaksi selesai pada periode ini.
+          </td>
+        </tr>`;
 
-  const driveBanner =
+  const driveInfoHtml =
     driveInfo && driveInfo.uploaded
       ? `
-      <div style="margin-top:16px; padding:12px 16px; background:#E5F5F6; border:1px solid #9BD4D8; border-radius:8px; font-size:13px; color:#2B6F75;">
-        <strong>☁️ Tersimpan Otomatis di Google Drive Owner:</strong><br/>
-        • File Laporan: <a href="${driveInfo.fileUrl}" style="color:#D46743; font-weight:bold;">${driveInfo.fileName}</a><br/>
-        • Folder Drive: <a href="${driveInfo.folderUrl}" style="color:#2B6F75; font-weight:bold;">Buka Folder Stockart_Reports</a>
+      <div style="border:1px solid #D4D4D4; border-radius:6px; background:#FAFAFA; padding:12px 14px; margin-bottom:20px; font-size:12px; color:#404040; line-height:1.6;">
+        <strong style="color:#000000;">Tersimpan di Google Drive owner</strong><br/>
+        File: <a href="${driveInfo.fileUrl}" style="color:#000000; font-weight:700;">${driveInfo.fileName}</a><br/>
+        Folder: <a href="${driveInfo.folderUrl}" style="color:#000000; font-weight:700;">Buka folder Stockart_Reports</a>
       </div>`
       : '';
 
+  let introText = `Berikut laporan penjualan dan stok <strong>Stockart</strong> untuk periode <strong>${periode}</strong>:`;
+  let footerText = `Laporan dikirim secara manual melalui dashboard <strong style="color:#171717;">Stockart</strong> ke <strong style="color:#171717;">${recipientLabel}</strong>. File PDF laporan terlampir pada email ini.`;
+
+  if (context === 'scheduled') {
+    const freqText = (freqLabel || 'terjadwal').toLowerCase();
+    introText = `Berikut laporan ${freqText} penjualan dan stok <strong>Stockart</strong> untuk periode <strong>${periode}</strong>:`;
+    footerText = `Laporan ${freqText} dikirim otomatis oleh server <strong style="color:#171717;">Stockart</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> sesuai jadwal kirim laporan yang aktif. File PDF laporan terlampir pada email ini.`;
+  }
+
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Laporan Stockart</title></head>
-<body style="margin:0; padding:16px; background:#FFFFFF;">
-  <div style="font-family:Segoe UI, Arial, sans-serif; max-width:640px; margin:0 auto; border:1px solid #EDD5BC; border-radius:12px; overflow:hidden;">
-    <div style="background:linear-gradient(135deg, #D46743, #E89B5B); color:#FFFFFF; padding:20px 24px;">
-      <h2 style="margin:0; font-size:19px;">📊 Laporan Keuangan & Penjualan — Stockart</h2>
-      <p style="margin:4px 0 0; font-size:12px; opacity:0.95;">Toko Kelontong "Berkah" • Periode: ${periodeLabel}</p>
-    </div>
-    <div style="padding:20px 24px; background:#FFF7EE; color:#2A1E17;">
-      <div style="display:flex; gap:12px; margin-bottom:18px;">
-        <div style="flex:1; background:#FFFFFF; border:1px solid #EDD5BC; border-radius:8px; padding:12px;">
-          <div style="font-size:11px; color:#755E52;">TOTAL OMZET KEUANGAN</div>
-          <div style="font-size:18px; font-weight:bold; color:#D46743; margin-top:4px;">${formatRp(summary.totalOmzet)}</div>
-        </div>
-        <div style="flex:1; background:#FFFFFF; border:1px solid #EDD5BC; border-radius:8px; padding:12px;">
-          <div style="font-size:11px; color:#755E52;">TOTAL TRANSAKSI</div>
-          <div style="font-size:18px; font-weight:bold; color:#2A1E17; margin-top:4px;">${summary.totalTransaksi} Struk</div>
-        </div>
-        <div style="flex:1; background:#FFFFFF; border:1px solid #EDD5BC; border-radius:8px; padding:12px;">
-          <div style="font-size:11px; color:#755E52;">TOTAL KATALOG AKTIF</div>
-          <div style="font-size:18px; font-weight:bold; color:#2B6F75; margin-top:4px;">${summary.totalProduk} Produk</div>
-        </div>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laporan Penjualan & Stok Stockart</title>
+</head>
+<body style="margin:0; padding:20px 12px; background:#F5F5F5; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width:680px; margin:0 auto; background:#FFFFFF; border:1px solid #D4D4D4; border-radius:6px; overflow:hidden;">
+    <div style="background:#FFFFFF; border-top:4px solid #000000; border-bottom:1px solid #E5E5E5; padding:24px 24px 20px;">
+      <div style="font-size:15px; font-weight:700; color:#000000; letter-spacing:-0.01em; margin:0 0 6px;">
+        Stockart
       </div>
-      <div style="display:flex; gap:12px; margin-bottom:18px;">
-        <div style="flex:1; background:#FFFFFF; border:1px solid #EDD5BC; border-radius:8px; padding:12px;">
-          <div style="font-size:11px; color:#755E52;">PRODUK TERJUAL</div>
-          <div style="font-size:18px; font-weight:bold; color:#2A1E17; margin-top:4px;">${Number(summary.totalTerjual || 0).toLocaleString('id-ID')} Unit</div>
-        </div>
-        <div style="flex:1; background:#FFFFFF; border:1px solid #EDD5BC; border-radius:8px; padding:12px;">
-          <div style="font-size:11px; color:#755E52;">BARANG MASUK</div>
-          <div style="font-size:18px; font-weight:bold; color:#2A1E17; margin-top:4px;">${Number(summary.totalMasuk || 0).toLocaleString('id-ID')} Unit</div>
-        </div>
-      </div>
-
-      <h3 style="font-size:14px; margin:16px 0 8px; color:#2A1E17;">🏆 Produk Terlaris (Top Selling Products)</h3>
-      <table style="width:100%; border-collapse:collapse; background:#FFFFFF; border-radius:8px; overflow:hidden; font-size:13px;">
-        <thead>
-          <tr style="background:#FFEAD3; text-align:left;">
-            <th style="padding:8px 12px;">No</th>
-            <th style="padding:8px 12px;">Nama Produk</th>
-            <th style="padding:8px 12px;">Terjual</th>
-            <th style="padding:8px 12px;">Pendapatan</th>
-          </tr>
-        </thead>
-        <tbody>${topRows}</tbody>
-      </table>
-
-      ${driveBanner}
-
-      <p style="font-size:12px; color:#755E52; margin-top:16px; margin-bottom:0;">
-        📎 <strong>File PDF Laporan</strong> telah dilampirkan pada email ini.<br/>
-        Dikirim otomatis oleh layanan <strong>Stockart</strong> (${process.env.SMTP_USER}) ke Email Owner (${to || process.env.OWNER_EMAIL}).
+      <h1 style="margin:0 0 6px; font-size:22px; font-weight:700; color:#000000; letter-spacing:-0.02em; line-height:1.25;">
+        ${titleText}
+      </h1>
+      <p style="margin:0; font-size:12px; color:#525252; line-height:1.5;">
+        Periode <strong style="color:#171717;">${periode}</strong> &middot; dibuat ${wibDateTime}
       </p>
+    </div>
+
+    <div style="padding:24px; background:#FFFFFF; color:#171717;">
+      <p style="font-size:14px; margin:0 0 8px; color:#000000; line-height:1.5;">
+        Halo <strong>Owner Stockart</strong>,
+      </p>
+      <p style="font-size:13px; line-height:1.6; color:#404040; margin:0 0 20px;">
+        ${introText}
+      </p>
+
+      <!-- Ringkasan -->
+      <div style="border:1px solid #D4D4D4; border-radius:6px; overflow:hidden; background:#FFFFFF; margin-bottom:20px;">
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead>
+            <tr style="background:#F5F5F5; color:#171717; text-align:left; border-bottom:2px solid #000000;">
+              <th style="padding:10px 12px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Ringkasan</th>
+              <th style="padding:10px 12px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; text-align:right;">Nilai</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${summaryRows}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Produk Terlaris -->
+      <div style="border:1px solid #D4D4D4; border-radius:6px; overflow:hidden; background:#FFFFFF; margin-bottom:20px;">
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead>
+            <tr style="background:#F5F5F5; color:#171717; text-align:left; border-bottom:2px solid #000000;">
+              <th style="padding:10px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; text-align:center; width:36px;">No</th>
+              <th style="padding:10px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">Produk Terlaris</th>
+              <th style="padding:10px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; text-align:center;">Terjual</th>
+              <th style="padding:10px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; text-align:right;">Pendapatan</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${topRows}
+          </tbody>
+        </table>
+      </div>
+
+      ${driveInfoHtml}
+
+      <!-- Action Button / CTA -->
+      <div style="text-align:center; margin:24px 0 16px;">
+        <a href="${reportUrl}" style="display:inline-block; background:#000000; color:#FFFFFF; text-decoration:none; padding:12px 24px; border-radius:4px; font-size:13px; font-weight:700; letter-spacing:0.02em;">
+          Buka Halaman Laporan &rarr;
+        </a>
+      </div>
+
+      <!-- Footer Info -->
+      <div style="border-top:1px solid #E5E5E5; padding-top:14px; margin-top:20px; font-size:11px; color:#525252; line-height:1.5;">
+        ${footerText}
+      </div>
     </div>
   </div>
 </body>
@@ -662,17 +777,34 @@ function buildReportHtml({ periodeLabel, summary, topProducts, to, driveInfo }) 
 }
 
 /**
- * Mengirim email Laporan Keuangan & Penjualan Produk ke Email Owner beserta lampiran file PDF.
+ * Mengirim email Laporan Penjualan & Stok ke Email Owner beserta lampiran file PDF.
  */
-async function sendReportEmail({ periodeLabel, summary, topProducts, to, driveInfo, pdfBuffer }) {
-  const html = buildReportHtml({ periodeLabel, summary, topProducts, to, driveInfo });
+async function sendReportEmail({
+  periodeLabel,
+  summary,
+  topProducts,
+  to,
+  driveInfo,
+  pdfBuffer,
+  context,
+  frequency,
+}) {
+  const html = buildReportHtml({
+    periodeLabel,
+    summary,
+    topProducts,
+    to,
+    driveInfo,
+    context,
+    frequency,
+  });
   const finalPdfBuffer =
     pdfBuffer || generateReportPdfBuffer({ periodeLabel, summary, topProducts });
   const safeDate = new Date().toISOString().slice(0, 10);
 
   return sendEmail({
     to,
-    subject: `📊 [Stockart Report] Laporan Keuangan & Inventaris (${periodeLabel})`,
+    subject: buildReportEmailSubject(periodeLabel, { context, frequency }),
     html,
     attachment: {
       filename: `Laporan_Stockart_${safeDate}.pdf`,
@@ -690,5 +822,6 @@ module.exports = {
   buildLowStockEmailHeader,
   buildLowStockEmailBody,
   buildReportHtml,
+  buildReportEmailSubject,
   sendReportEmail,
 };
