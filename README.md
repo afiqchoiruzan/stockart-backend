@@ -241,6 +241,7 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 | **Laporan** | `GET` | `/api/reports/summary` | Pemilik | Ringkasan omzet, transaksi, produk, produk terjual (`totalTerjual`), dan barang masuk (`totalMasuk`) |
 | | `GET` | `/api/reports/revenue` | Pemilik | Data pendapatan per tanggal WIB untuk grafik tren (`?interval=jam` untuk per jam) |
 | | `GET` | `/api/reports/top-products` | Pemilik | 5 produk terlaris berdasarkan kuantitas & omzet |
+| | `GET` | `/api/reports/pdf` | Pemilik | Unduh PDF laporan periode tertentu (ringkasan, grafik omzet, produk terlaris; sama dengan lampiran email) |
 | | `POST` | `/api/reports/send-email` | Pemilik | Kirim laporan periode tertentu ke email owner sekarang juga (salinan PDF ke Google Drive bila diatur) |
 
 > 💡 **File Pengujian Postman:**  

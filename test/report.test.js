@@ -62,3 +62,54 @@ test('TOP_PRODUCTS_SORT: urutan stabil saat jumlah terjual seri', () => {
   assert.deepEqual(Object.keys(TOP_PRODUCTS_SORT), ['totalTerjual', 'totalPendapatan', '_id']);
   assert.deepEqual(Object.values(TOP_PRODUCTS_SORT), [-1, -1, 1]);
 });
+
+test('generateReportPdfBuffer: PDF monokrom valid dengan grafik omzet & teks aman Latin-1', () => {
+  const { generateReportPdfBuffer, sanitizeText } = require('../services/pdfService');
+
+  assert.equal(sanitizeText('Laporan — 10 Nov'), 'Laporan - 10 Nov');
+  assert.equal(sanitizeText('Rp 284.500 '), 'Rp 284.500 ');
+
+  const buffer = generateReportPdfBuffer({
+    periodeLabel: '2026-11-10 s/d 2026-11-16',
+    summary: { totalProduk: 55, totalTransaksi: 6, totalOmzet: 284500, totalTerjual: 16, totalMasuk: 20 },
+    topProducts: [{ namaProduk: 'Minyak (Bimoli) 2L', totalTerjual: 5, totalPendapatan: 150000 }],
+    chart: {
+      title: 'Omzet per Hari',
+      points: [
+        { label: 'Jum', sublabel: '13/11', omzet: 96000 },
+        { label: 'Sab', sublabel: '14/11', omzet: 0 },
+      ],
+    },
+    context: 'scheduled',
+    frequency: 'weekly',
+  });
+  const content = buffer.toString('latin1');
+
+  assert.ok(content.startsWith('%PDF-1.4'));
+  assert.ok(content.trimEnd().endsWith('%%EOF'));
+  assert.ok(content.includes('(Laporan Mingguan Penjualan & Stok)'));
+  assert.ok(content.includes('(OMZET PER HARI)'));
+  assert.ok(content.includes('(96 rb)'));
+  // Tanda kurung di nama produk harus di-escape agar teks PDF tidak rusak
+  assert.ok(content.includes(String.raw`(Minyak \(Bimoli\) 2L)`));
+  // Monokrom: tidak ada lagi warna terracotta laporan lama
+  assert.ok(!content.includes('0.831 0.404 0.263'));
+
+  const empty = generateReportPdfBuffer({ periodeLabel: 'Semua Periode', summary: {}, topProducts: [] });
+  assert.ok(empty.toString('latin1').includes('(Belum ada omzet pada periode ini.)'));
+});
+
+test('getFrontendBaseUrl: tautan email memakai URL frontend production, bukan localhost', () => {
+  const { getFrontendBaseUrl } = require('../services/emailService');
+
+  assert.equal(
+    getFrontendBaseUrl({ CORS_ORIGIN: 'http://localhost:3000, https://stockart.vercel.app/' }),
+    'https://stockart.vercel.app'
+  );
+  assert.equal(
+    getFrontendBaseUrl({ FRONTEND_URL: 'https://app.example.com/', CORS_ORIGIN: 'https://stockart.vercel.app' }),
+    'https://app.example.com'
+  );
+  assert.equal(getFrontendBaseUrl({ CORS_ORIGIN: 'http://127.0.0.1:3000' }), 'http://127.0.0.1:3000');
+  assert.equal(getFrontendBaseUrl({}), 'http://localhost:3000');
+});

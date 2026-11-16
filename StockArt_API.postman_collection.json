@@ -690,6 +690,36 @@
 						"description": "Laporan daftar produk dengan penjualan terbanyak (Hanya role Pemilik)."
 					},
 					"response": []
+				},
+				{
+					"name": "Download Report PDF (Laporan PDF)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/reports/pdf?tanggalMulai=2026-11-10&tanggalAkhir=2026-11-16",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"reports",
+								"pdf"
+							],
+							"query": [
+								{
+									"key": "tanggalMulai",
+									"value": "2026-11-10"
+								},
+								{
+									"key": "tanggalAkhir",
+									"value": "2026-11-16"
+								}
+							]
+						},
+						"description": "Mengunduh PDF laporan (ringkasan, grafik omzet, produk terlaris) sama seperti lampiran email. Gunakan Send and Download di Postman (Hanya role Pemilik)."
+					},
+					"response": []
 				}
 			]
 		},
