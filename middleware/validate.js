@@ -12,6 +12,7 @@
 'use strict';
 
 const { validateSettingsPayload } = require('../services/lowStockSettingsService');
+const { validateReportSettingsPayload } = require('../services/reportScheduleSettingsService');
 
 // ─── Helpers internal ────────────────────────────────────────────────────────
 
@@ -184,6 +185,12 @@ const restockRules = (body) => {
  */
 const lowStockSettingsRules = (body) => validateSettingsPayload(body).errors;
 
+/**
+ * PUT /api/notifications/report/settings
+ * { digestFrequency?, digestTime?, digestWeekday?, digestDayOfMonth?, saveToDrive? }
+ */
+const reportSettingsRules = (body) => validateReportSettingsPayload(body).errors;
+
 // ─── Middleware pabrik ────────────────────────────────────────────────────────
 
 /**
@@ -216,4 +223,5 @@ module.exports = {
   transactionRules,
   restockRules,
   lowStockSettingsRules,
+  reportSettingsRules,
 };
