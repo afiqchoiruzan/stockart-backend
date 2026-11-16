@@ -625,6 +625,16 @@ function buildReportHtml({ periodeLabel, summary, topProducts, to, driveInfo }) 
           <div style="font-size:18px; font-weight:bold; color:#2B6F75; margin-top:4px;">${summary.totalProduk} Produk</div>
         </div>
       </div>
+      <div style="display:flex; gap:12px; margin-bottom:18px;">
+        <div style="flex:1; background:#FFFFFF; border:1px solid #EDD5BC; border-radius:8px; padding:12px;">
+          <div style="font-size:11px; color:#755E52;">PRODUK TERJUAL</div>
+          <div style="font-size:18px; font-weight:bold; color:#2A1E17; margin-top:4px;">${Number(summary.totalTerjual || 0).toLocaleString('id-ID')} Unit</div>
+        </div>
+        <div style="flex:1; background:#FFFFFF; border:1px solid #EDD5BC; border-radius:8px; padding:12px;">
+          <div style="font-size:11px; color:#755E52;">BARANG MASUK</div>
+          <div style="font-size:18px; font-weight:bold; color:#2A1E17; margin-top:4px;">${Number(summary.totalMasuk || 0).toLocaleString('id-ID')} Unit</div>
+        </div>
+      </div>
 
       <h3 style="font-size:14px; margin:16px 0 8px; color:#2A1E17;">🏆 Produk Terlaris (Top Selling Products)</h3>
       <table style="width:100%; border-collapse:collapse; background:#FFFFFF; border-radius:8px; overflow:hidden; font-size:13px;">

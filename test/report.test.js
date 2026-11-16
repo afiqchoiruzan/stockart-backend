@@ -6,7 +6,7 @@ const {
   buildDateFilter,
   parseRevenueInterval,
   TOP_PRODUCTS_SORT,
-} = require('../controllers/reportController');
+} = require('../services/reportService');
 
 test('buildDateFilter: rentang tanggal dihitung dari 00:00 WIB', () => {
   const filter = buildDateFilter('2026-11-10', '2026-11-16');
