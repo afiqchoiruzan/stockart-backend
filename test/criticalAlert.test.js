@@ -143,7 +143,7 @@ test('Critical Out-of-Stock Alert E2E: checkout stok 0, anti-duplikat, reset res
     await waitUntil(() => sentEmails.length === 1);
 
     assert.equal(sentEmails.length, 1);
-    assert.match(sentEmails[0].subject, /^\[StockArt Kritis\] Stok Habis: Minyak Habis/);
+    assert.match(sentEmails[0].subject, /^\[Stockart Kritis\] Stok Habis: Minyak Habis/);
     assert.match(sentEmails[0].htmlContent, /transaksi kasir membuat stok produk mencapai 0/);
 
     const updated = await Product.findById(p._id);

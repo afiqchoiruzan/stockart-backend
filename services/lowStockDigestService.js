@@ -52,6 +52,14 @@ async function runDigestIfDue({
   emailConfigured = isEmailConfigured,
 } = {}) {
   const settings = await getLowStockSettings(now);
+  if (settings.lastDigestStatus === 'email_not_configured' && emailConfigured()) {
+    await NotificationSetting.updateOne(
+      { key: SETTINGS_KEY, lastDigestStatus: 'email_not_configured' },
+      { $set: { lastDigestStatus: null, lastDigestError: null } }
+    );
+    settings.lastDigestStatus = null;
+    settings.lastDigestError = null;
+  }
   const { due, occurrence } = isDigestDue(settings, now);
 
   if (!due || !occurrence) {

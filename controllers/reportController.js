@@ -338,7 +338,7 @@ const sendReportToOwner = async (req, res) => {
         if (process.env.GDRIVE_WEBHOOK_URL) {
             const safeDate = new Date().toISOString().slice(0, 10);
             driveInfo = await uploadReportToDrive({
-                fileName: `Laporan_StockArt_${safeDate}.pdf`,
+                fileName: `Laporan_Stockart_${safeDate}.pdf`,
                 content: htmlContent,
                 ownerEmail: customEmail || process.env.OWNER_EMAIL
             });

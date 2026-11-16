@@ -77,18 +77,18 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
   await t.test('Subject email tegas tanpa emoji dan membedakan status kritis stok habis', () => {
     const subjectKritis = buildLowStockEmailSubject(sampleProducts, new Date('2026-11-12T10:00:00Z'));
     assert.equal(EMOJI_REGEX.test(subjectKritis), false, `Subject masih mengandung emoji: ${subjectKritis}`);
-    assert.match(subjectKritis, /^\[StockArt Kritis\]/);
+    assert.match(subjectKritis, /^\[Stockart Kritis\]/);
     assert.match(subjectKritis, /1 Produk Habis/);
     assert.match(subjectKritis, /1 Menipis/);
 
     const nonKritis = [sampleProducts[1]];
     const subjectWarning = buildLowStockEmailSubject(nonKritis, new Date('2026-11-12T10:00:00Z'));
     assert.equal(EMOJI_REGEX.test(subjectWarning), false, `Subject masih mengandung emoji: ${subjectWarning}`);
-    assert.match(subjectWarning, /^\[StockArt Alert\]/);
+    assert.match(subjectWarning, /^\[Stockart Alert\]/);
     assert.match(subjectWarning, /1 Produk Stok Menipis/);
   });
 
-  await t.test('Header email selalu berjudul Peringatan Stok Produk Menipis + tanggal tanpa teks Waktu Deteksi', () => {
+  await t.test('Header email menampilkan Stockart paling atas tanpa badge STATUS STOK MENIPIS atau STOCKART POS', () => {
     const headerHtml = buildLowStockEmailHeader(sampleProducts, {
       wibDateTime: 'Kamis, 12 November 2026, 20:55 WIB',
       isCritical: true,
@@ -98,11 +98,18 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
     assert.equal(EMOJI_REGEX.test(headerHtml), false, 'Header masih mengandung emoji');
     assert.equal(/linear-gradient/i.test(headerHtml), false, 'Header tidak boleh memakai linear-gradient');
     assert.match(headerHtml, /Stockart/);
+    assert.equal(/StockArt/.test(headerHtml), false, 'Huruf A besar pada StockArt harus diganti Stockart');
+    assert.equal(/STOCKART POS/i.test(headerHtml), false, 'Teks STOCKART POS harus dihapus');
+    assert.equal(/INVENTORY ALERT/i.test(headerHtml), false, 'Teks INVENTORY ALERT harus dihapus');
+    assert.equal(/STATUS:\s*STOK/i.test(headerHtml), false, 'Badge STATUS STOK MENIPIS/HABIS harus dihapus');
     assert.equal(/Berkah/i.test(headerHtml), false, 'Nama Toko Berkah harus diganti Stockart');
     assert.match(headerHtml, /Peringatan Stok Produk Menipis/);
+    assert.ok(
+      headerHtml.indexOf('Stockart') < headerHtml.indexOf('Peringatan Stok Produk Menipis'),
+      'Judul Stockart harus berada di posisi paling atas header'
+    );
     assert.equal(/Peringatan Stok Habis &amp;? Menipis/i.test(headerHtml), false);
     assert.equal(/Waktu Deteksi/i.test(headerHtml), false, 'Tulisan Waktu Deteksi harus dihilangkan');
-    assert.match(headerHtml, /STATUS: STOK HABIS \(KRITIS\)/);
     assert.match(headerHtml, /Kamis, 12 November 2026, 20:55 WIB/);
 
     const hexMatches = headerHtml.match(/#[0-9A-Fa-f]{6}\b/g) || [];
@@ -198,27 +205,27 @@ test('Email Alert Low Stock: desain monokrom tanpa emoji dengan aksen merah khus
       context: 'digest',
       frequency: 'weekly',
     });
-    assert.match(weeklySubject, /^\[StockArt Rekap Mingguan\]/);
+    assert.match(weeklySubject, /^\[Stockart Rekap Mingguan\]/);
     assert.equal(EMOJI_REGEX.test(weeklySubject), false);
 
     const dailySubject = buildLowStockEmailSubject([sampleProducts[1]], now, {
       context: 'digest',
       frequency: 'daily',
     });
-    assert.match(dailySubject, /^\[StockArt Rekap Harian\]/);
+    assert.match(dailySubject, /^\[Stockart Rekap Harian\]/);
 
     const monthlySubject = buildLowStockEmailSubject(sampleProducts, now, {
       context: 'digest',
       frequency: 'monthly',
     });
-    assert.match(monthlySubject, /^\[StockArt Rekap Bulanan\]/);
+    assert.match(monthlySubject, /^\[Stockart Rekap Bulanan\]/);
 
     const critOne = buildLowStockEmailSubject([sampleProducts[0]], now, { context: 'critical' });
-    assert.match(critOne, /^\[StockArt Kritis\] Stok Habis: Minyak Goreng Bimoli 2L/);
+    assert.match(critOne, /^\[Stockart Kritis\] Stok Habis: Minyak Goreng Bimoli 2L/);
     assert.equal(EMOJI_REGEX.test(critOne), false);
 
     const critMany = buildLowStockEmailSubject(sampleProducts, now, { context: 'critical' });
-    assert.match(critMany, /^\[StockArt Kritis\] Stok Habis: Minyak Goreng Bimoli 2L \(\+1 Produk Lainnya\)/);
+    assert.match(critMany, /^\[Stockart Kritis\] Stok Habis: Minyak Goreng Bimoli 2L \(\+1 Produk Lainnya\)/);
 
     const wibDateTime = 'Kamis, 12 November 2026, 17:00 WIB';
     const digestHeader = buildLowStockEmailHeader(sampleProducts, {
@@ -484,7 +491,7 @@ test('sendEmail dual-mode: Brevo HTTP API & normalisasi AggregateError SMTP', as
       assert.equal(brevoCalls.length, 1);
       assert.equal(brevoCalls[0].url, 'https://api.brevo.com/v3/smtp/email');
       const sentPayload = JSON.parse(brevoCalls[0].init.body);
-      assert.match(sentPayload.subject, /^\[StockArt Kritis\] Stok Habis: Sabun Habis Brevo/);
+      assert.match(sentPayload.subject, /^\[Stockart Kritis\] Stok Habis: Sabun Habis Brevo/);
     } finally {
       for (const [k, v] of Object.entries(prevEnv)) {
         if (v === undefined) delete process.env[k];

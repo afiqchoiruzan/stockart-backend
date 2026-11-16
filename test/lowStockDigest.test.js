@@ -247,6 +247,19 @@ test('Low Stock Digest Runner & Scheduler: atomik, tahan restart, retry, dan fil
     });
     assert.equal(r2.executed, false);
     assert.equal(r2.reason, 'not_due');
+
+    // Jika kemudian env email aktif dan tick berjalan lagi, status usang 'email_not_configured' dibersihkan
+    const r3 = await runDigestIfDue({
+      now: new Date('2026-11-09T00:10:00Z'),
+      send: async () => {
+        sendCalls += 1;
+      },
+      emailConfigured: () => true,
+    });
+    assert.equal(r3.executed, false);
+    const healedDoc = await NotificationSetting.findOne({ key: 'lowStockAlert' });
+    assert.equal(healedDoc.lastDigestStatus, null);
+    assert.equal(healedDoc.lastDigestError, null);
   });
 
   await t.test('8. startLowStockScheduler & stopLowStockScheduler mematuhi toggle dan tidak menyisakan handle', async () => {

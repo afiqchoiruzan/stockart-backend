@@ -178,7 +178,11 @@ async function getLowStockSettings(now = new Date()) {
  * Memperbarui pengaturan notifikasi secara parsial.
  * Hanya mereset `scheduleActivatedAt` & `digestAttempts` jika nilai field jadwal berubah.
  */
-async function updateLowStockSettings(payload, now = new Date()) {
+async function updateLowStockSettings(
+  payload,
+  now = new Date(),
+  { emailConfigured = isEmailConfigured } = {}
+) {
   const { valid, errors, updates } = validateSettingsPayload(payload);
   if (!valid) {
     throw Object.assign(new Error(errors.join('; ')), {
@@ -201,6 +205,12 @@ async function updateLowStockSettings(payload, now = new Date()) {
     setFields.lastAttemptOccurrence = null;
   }
 
+  // Bersihkan status usang 'email_not_configured' bila konfigurasi email saat ini sudah aktif
+  if (current.lastDigestStatus === 'email_not_configured' && emailConfigured()) {
+    setFields.lastDigestStatus = null;
+    setFields.lastDigestError = null;
+  }
+
   return NotificationSetting.findOneAndUpdate(
     { key: SETTINGS_KEY },
     { $set: setFields },
@@ -213,6 +223,9 @@ async function updateLowStockSettings(payload, now = new Date()) {
  */
 function formatSettingsResponse(doc, { now = new Date(), emailConfigured = isEmailConfigured() } = {}) {
   const nextRun = getNextOccurrence(doc, now);
+  const configured = Boolean(emailConfigured);
+  const staleUnconfigured = configured && doc.lastDigestStatus === 'email_not_configured';
+
   return {
     digestFrequency: doc.digestFrequency,
     digestTime: doc.digestTime,
@@ -223,11 +236,11 @@ function formatSettingsResponse(doc, { now = new Date(), emailConfigured = isEma
     nextRunAt: nextRun ? nextRun.toISOString() : null,
     lastDigestOccurrence: doc.lastDigestOccurrence || null,
     lastDigestSentAt: doc.lastDigestSentAt || null,
-    lastDigestStatus: doc.lastDigestStatus || null,
+    lastDigestStatus: staleUnconfigured ? null : (doc.lastDigestStatus || null),
     lastDigestCount: doc.lastDigestCount ?? 0,
-    lastDigestError: doc.lastDigestError || null,
+    lastDigestError: staleUnconfigured ? null : (doc.lastDigestError || null),
     digestAttempts: doc.digestAttempts ?? 0,
-    emailConfigured: Boolean(emailConfigured),
+    emailConfigured: configured,
   };
 }
 
