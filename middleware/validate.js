@@ -18,6 +18,14 @@ const { validateSettingsPayload } = require('../services/lowStockSettingsService
 const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
 const isPositiveNumber = (v) => typeof v === 'number' && isFinite(v) && v >= 0;
 
+// Barcode boleh tidak dikirim, null, atau string kosong (berarti "tanpa barcode").
+// Jika berisi, harus teks 4–48 karakter tanpa spasi.
+const isEmptyBarcode = (v) => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+const barcodeError = (v) =>
+  !isEmptyBarcode(v) && (typeof v !== 'string' || !/^\S{4,48}$/.test(v.trim()))
+    ? 'barcode harus berupa teks 4–48 karakter tanpa spasi'
+    : null;
+
 // ─── Aturan validasi per endpoint ────────────────────────────────────────────
 
 /**
@@ -66,7 +74,7 @@ const loginRules = (body) => {
 
 /**
  * POST /api/products
- * { nama, kodeProduk?, hargaBeli, hargaJual, stok?, stokMinimum? }
+ * { nama, kodeProduk?, barcode?, hargaBeli, hargaJual, stok?, stokMinimum? }
  * kodeProduk dibuat otomatis jika tidak dikirim.
  */
 const productRules = (body) => {
@@ -79,6 +87,9 @@ const productRules = (body) => {
   if (body.kodeProduk !== undefined && !isNonEmptyString(body.kodeProduk)) {
     errors.push('kodeProduk harus berupa teks dan tidak boleh kosong jika dikirim');
   }
+
+  const barcodeMsg = barcodeError(body.barcode);
+  if (barcodeMsg) errors.push(barcodeMsg);
 
   if (body.hargaBeli === undefined || body.hargaBeli === null) {
     errors.push('hargaBeli wajib diisi');
@@ -108,6 +119,10 @@ const productRules = (body) => {
  */
 const productUpdateRules = (body) => {
   const errors = [];
+
+  // barcode "" / null pada update berarti hapus barcode (ditangani di controller).
+  const barcodeMsg = barcodeError(body.barcode);
+  if (barcodeMsg) errors.push(barcodeMsg);
 
   if (body.hargaBeli !== undefined && !isPositiveNumber(Number(body.hargaBeli))) {
     errors.push('hargaBeli harus berupa angka dan tidak boleh negatif');

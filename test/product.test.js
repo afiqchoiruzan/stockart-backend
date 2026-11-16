@@ -658,3 +658,85 @@ test('E2E Logika Product Lengkap (CRUD, Filter, Restock, Soft/Hard Delete, Resto
     }
   });
 });
+
+test('validasi barcode: opsional, 4–48 karakter tanpa spasi', () => {
+  const { productUpdateRules } = require('../middleware/validate');
+  for (const barcode of [undefined, null, '', '   ', '8991234567890', 'ABCD', 'x'.repeat(48)]) {
+    assert.deepEqual(productRules({ ...payload, barcode }), [], `barcode ${JSON.stringify(barcode)} harus lolos`);
+    assert.deepEqual(productUpdateRules({ barcode }), [], `update barcode ${JSON.stringify(barcode)} harus lolos`);
+  }
+  for (const barcode of ['abc', 'x'.repeat(49), '899 123', 8991234567890, {}, []]) {
+    assert.ok(productRules({ ...payload, barcode }).length, `barcode ${JSON.stringify(barcode)} harus ditolak`);
+    assert.ok(productUpdateRules({ barcode }).length, `update barcode ${JSON.stringify(barcode)} harus ditolak`);
+  }
+});
+
+test('HTTP: barcode unik, sparse, dan dapat dihapus lewat update', async (t) => {
+  const dbName = `prd_bc_${process.pid}_${Date.now()}`;
+  await mongoose.connect(process.env.MONGO_URI, { dbName, serverSelectionTimeoutMS: 10000 });
+  let server;
+  t.after(async () => {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    try {
+      await mongoose.connection.dropDatabase();
+    } finally {
+      await mongoose.disconnect();
+    }
+  });
+  await Promise.all([Product.init(), User.init()]);
+  const owner = await User.create({ nama: 'Owner barcode', username: 'barcode_test_owner',
+    password: 'test-only', role: 'pemilik' });
+  const token = jwt.sign({ id: owner._id }, process.env.JWT_SECRET, { expiresIn: '5m' });
+  server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}/api/products`;
+  async function request(method, path, body) {
+    const response = await fetch(base + path, { method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: response.status, ...(await response.json()) };
+  }
+
+  // Barcode valid berhasil disimpan (dengan trim).
+  const withBarcode = await request('POST', '', { ...payload, barcode: ' 8991234567890 ' });
+  assert.equal(withBarcode.status, 201, JSON.stringify(withBarcode));
+  assert.equal(withBarcode.data.barcode, '8991234567890');
+
+  // Barcode sama kedua kali ditolak dengan pesan jelas.
+  const duplicate = await request('POST', '', { ...payload, barcode: '8991234567890' });
+  assert.equal(duplicate.status, 400);
+  assert.equal(duplicate.message, 'Barcode sudah digunakan oleh produk lain');
+
+  // Produk tanpa barcode (tidak dikirim / string kosong) tidak saling bentrok.
+  const noBarcodeA = await request('POST', '', payload);
+  const noBarcodeB = await request('POST', '', { ...payload, barcode: '' });
+  assert.equal(noBarcodeA.status, 201, JSON.stringify(noBarcodeA));
+  assert.equal(noBarcodeB.status, 201, JSON.stringify(noBarcodeB));
+  assert.equal(noBarcodeA.data.barcode, undefined);
+  assert.equal(noBarcodeB.data.barcode, undefined);
+
+  // Update ke barcode milik produk lain ditolak.
+  const dupUpdate = await request('PUT', `/${noBarcodeA.data._id}`, { barcode: '8991234567890' });
+  assert.equal(dupUpdate.status, 400);
+  assert.equal(dupUpdate.message, 'Barcode sudah digunakan oleh produk lain');
+
+  // Update barcode "" → field dihapus (bukan disimpan ""), barcode jadi bebas dipakai lagi.
+  const cleared = await request('PUT', `/${withBarcode.data._id}`, { barcode: '' });
+  assert.equal(cleared.status, 200, JSON.stringify(cleared));
+  assert.equal(cleared.data.barcode, undefined);
+  assert.equal(await Product.countDocuments({ barcode: { $exists: true } }), 0);
+  const reused = await request('PUT', `/${noBarcodeA.data._id}`, { barcode: '8991234567890' });
+  assert.equal(reused.status, 200, JSON.stringify(reused));
+  assert.equal(reused.data.barcode, '8991234567890');
+
+  // Update tanpa menyentuh barcode tidak menghapusnya.
+  const renamed = await request('PUT', `/${noBarcodeA.data._id}`, { nama: 'Nama baru' });
+  assert.equal(renamed.data.barcode, '8991234567890');
+
+  // Pesan duplikat kodeProduk tetap seperti semula.
+  const kode = { ...payload, kodeProduk: 'BC-KODE-001' };
+  assert.equal((await request('POST', '', kode)).status, 201);
+  const dupKode = await request('POST', '', kode);
+  assert.equal(dupKode.status, 400);
+  assert.equal(dupKode.message, 'Kode produk sudah digunakan oleh produk lain');
+});

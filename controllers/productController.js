@@ -14,6 +14,22 @@ const stripHargaBeliForKasir = (item, role) => {
 const isDuplicateKeyError = (error) =>
   error?.code === 11000 || /E11000/i.test(error?.message || '');
 
+// Tentukan field mana yang bentrok (barcode atau kodeProduk) dari error E11000.
+const getDuplicateKeyMessage = (error) => {
+  const fields = Object.keys(error?.keyPattern || error?.keyValue || {});
+  const isBarcode = fields.length
+    ? fields.includes('barcode')
+    : /barcode/i.test(error?.message || '');
+  return isBarcode
+    ? 'Barcode sudah digunakan oleh produk lain'
+    : 'Kode produk sudah digunakan oleh produk lain';
+};
+
+// "" / spasi / null dianggap "tanpa barcode". Jangan pernah simpan "" karena
+// index unik sparse tetap mengindeks string kosong dan akan bentrok.
+const isEmptyBarcode = (v) =>
+  v === null || (typeof v === 'string' && v.trim() === '');
+
 // GET /api/products
 exports.getProducts = async (req, res) => {
   try {
@@ -159,7 +175,10 @@ exports.getProductById = async (req, res) => {
 // POST /api/products
 exports.createProduct = async (req, res) => {
   try {
-    const product = await Product.create(req.body);
+    const body = { ...req.body };
+    if (isEmptyBarcode(body.barcode)) delete body.barcode;
+
+    const product = await Product.create(body);
 
     res.status(201).json({
       success: true,
@@ -168,7 +187,7 @@ exports.createProduct = async (req, res) => {
     });
   } catch (error) {
     const message = isDuplicateKeyError(error)
-      ? 'Kode produk sudah digunakan oleh produk lain'
+      ? getDuplicateKeyMessage(error)
       : 'Gagal menambahkan produk';
     res.status(400).json({
       success: false,
@@ -181,9 +200,16 @@ exports.createProduct = async (req, res) => {
 // PUT /api/products/:id
 exports.updateProduct = async (req, res) => {
   try {
+    const update = { ...req.body };
+    if (isEmptyBarcode(update.barcode)) {
+      // Barcode dikosongkan → hapus field-nya, bukan menyimpan "".
+      delete update.barcode;
+      update.$unset = { barcode: 1 };
+    }
+
     const product = await Product.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      update,
       {
         returnDocument: 'after',
         runValidators: true,
@@ -209,7 +235,7 @@ exports.updateProduct = async (req, res) => {
     });
   } catch (error) {
     const message = isDuplicateKeyError(error)
-      ? 'Kode produk sudah digunakan oleh produk lain'
+      ? getDuplicateKeyMessage(error)
       : 'Gagal memperbarui produk';
     res.status(400).json({
       success: false,
