@@ -159,4 +159,38 @@ test('NotificationSetting persistence: get-or-create konkuren & pembaruan parsia
   });
   assert.equal(formatted.nextRunAt, '2026-11-16T02:15:00.000Z');
   assert.equal(formatted.emailConfigured, true);
+
+  // Simulasi status usang 'email_not_configured' saat konfigurasi email kini sudah aktif
+  await NotificationSetting.updateOne(
+    { key: 'lowStockAlert' },
+    {
+      $set: {
+        lastDigestStatus: 'email_not_configured',
+        lastDigestError: 'Konfigurasi email belum diatur',
+      },
+    }
+  );
+  const staleDoc = await NotificationSetting.findOne({ key: 'lowStockAlert' });
+  const hiddenWhenConfigured = formatSettingsResponse(staleDoc, {
+    now: t3,
+    emailConfigured: true,
+  });
+  assert.equal(hiddenWhenConfigured.emailConfigured, true);
+  assert.equal(hiddenWhenConfigured.lastDigestStatus, null);
+  assert.equal(hiddenWhenConfigured.lastDigestError, null);
+
+  const shownWhenUnconfigured = formatSettingsResponse(staleDoc, {
+    now: t3,
+    emailConfigured: false,
+  });
+  assert.equal(shownWhenUnconfigured.lastDigestStatus, 'email_not_configured');
+
+  // Update pengaturan saat emailConfigured=true membersihkan status usang di DB
+  const cleanedDoc = await updateLowStockSettings(
+    { digestFrequency: 'monthly', digestDayOfMonth: 1 },
+    new Date('2026-11-15T04:00:00Z'),
+    { emailConfigured: () => true }
+  );
+  assert.equal(cleanedDoc.lastDigestStatus, null);
+  assert.equal(cleanedDoc.lastDigestError, null);
 });
