@@ -4,3 +4,7 @@ CLAUDE.md
 
 # File konfigurasi rahasia (berisi PORT, MONGO_URI, JWT_SECRET)
 .env
+
+# Folder workspace lokal Postman (dibuat otomatis saat repo dibuka di Postman Local Mode)
+.postman/
+/postman/
