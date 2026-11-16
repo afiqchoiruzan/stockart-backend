@@ -330,10 +330,12 @@ async function sendReport({
     tanggalAkhir,
   });
 
+  // HTML ini juga dikonversi menjadi PDF di Google Drive, jadi grafik omzet ikut disertakan
   const htmlContent = buildReportHtml({
     periodeLabel,
     summary,
     topProducts,
+    chart,
     to: email,
     context,
     frequency,

@@ -617,6 +617,95 @@ function buildReportEmailSubject(periodeLabel, { context, frequency } = {}) {
   return `[Stockart Laporan] Laporan Penjualan & Stok — ${periode}`;
 }
 
+function formatShortRp(n) {
+  const value = Number(n || 0);
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1).replace('.', ',')} jt`;
+  if (value >= 1e3) return `${Math.round(value / 1e3)} rb`;
+  return String(Math.round(value));
+}
+
+/**
+ * Grafik batang omzet dalam HTML berbasis tabel (aman untuk klien email dan
+ * konversi PDF Google Drive), dengan data yang sama seperti grafik di PDF laporan.
+ * chart: { title, points: [{ label, sublabel?, omzet }], note? }
+ */
+function buildReportChartHtml(chart) {
+  const points = Array.isArray(chart?.points) ? chart.points : [];
+  const total = points.reduce((sum, p) => sum + Number(p.omzet || 0), 0);
+  const maxOmzet = Math.max(0, ...points.map((p) => Number(p.omzet || 0)));
+  const plotHeight = 120;
+  const showValues = points.length <= 16;
+
+  const header = `
+        <thead>
+          <tr style="background:#F5F5F5; color:#171717; text-align:left; border-bottom:2px solid #000000;">
+            <th style="padding:10px 12px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">${chart?.title || 'Omzet'}</th>
+            <th style="padding:10px 12px; font-size:11px; font-weight:700; letter-spacing:0.02em; text-align:right;">Total ${formatRp(total)}</th>
+          </tr>
+        </thead>`;
+
+  if (points.length === 0 || maxOmzet <= 0) {
+    return `
+      <div style="border:1px solid #D4D4D4; border-radius:6px; overflow:hidden; background:#FFFFFF; margin-bottom:20px;">
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">${header}
+          <tbody>
+            <tr><td colspan="2" style="padding:24px 12px; text-align:center; font-size:12px; color:#525252;">Belum ada omzet pada periode ini.</td></tr>
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  const barCells = points
+    .map((point) => {
+      const omzet = Number(point.omzet || 0);
+      const barHeight = omzet > 0 ? Math.max(2, Math.round((omzet / maxOmzet) * plotHeight)) : 1;
+      const barColor = omzet > 0 ? '#171717' : '#D4D4D4';
+      const valueLabel =
+        omzet > 0 && (showValues || omzet === maxOmzet)
+          ? `<div style="font-size:9px; color:#525252; line-height:1.2; margin-bottom:3px; white-space:nowrap;">${formatShortRp(omzet)}</div>`
+          : '';
+      return `
+              <td style="vertical-align:bottom; text-align:center; padding:0 2px; height:${plotHeight + 16}px;">
+                ${valueLabel}
+                <div style="width:70%; max-width:36px; height:${barHeight}px; line-height:${barHeight}px; font-size:1px; background:${barColor}; margin:0 auto;">&nbsp;</div>
+              </td>`;
+    })
+    .join('');
+
+  const labelCells = points
+    .map(
+      (point) => `
+              <td style="vertical-align:top; text-align:center; padding:6px 2px 0; border-top:1px solid #D4D4D4;">
+                <div style="font-size:10px; color:#171717; white-space:nowrap;">${point.label}</div>
+                ${point.sublabel ? `<div style="font-size:9px; color:#525252; white-space:nowrap;">${point.sublabel}</div>` : ''}
+              </td>`
+    )
+    .join('');
+
+  const note = chart?.note
+    ? `<div style="padding:0 12px 10px; font-size:10px; color:#525252;">${chart.note}</div>`
+    : '';
+
+  return `
+      <div style="border:1px solid #D4D4D4; border-radius:6px; overflow:hidden; background:#FFFFFF; margin-bottom:20px;">
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">${header}
+          <tbody>
+            <tr>
+              <td colspan="2" style="padding:14px 12px 12px;">
+                <table role="presentation" style="width:100%; border-collapse:collapse; table-layout:fixed;">
+                  <tr>${barCells}
+                  </tr>
+                  <tr>${labelCells}
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        ${note}
+      </div>`;
+}
+
 /**
  * Membangun HTML Laporan Penjualan & Stok dengan gaya monokrom yang sama
  * seperti email rekap stok menipis (header Stockart, sapaan, tabel, tombol CTA).
@@ -625,6 +714,7 @@ function buildReportHtml({
   periodeLabel,
   summary,
   topProducts,
+  chart,
   to,
   driveInfo,
   context,
@@ -756,6 +846,9 @@ function buildReportHtml({
         </table>
       </div>
 
+      <!-- Grafik Omzet -->
+      ${chart ? buildReportChartHtml(chart) : ''}
+
       <!-- Produk Terlaris -->
       <div style="border:1px solid #D4D4D4; border-radius:6px; overflow:hidden; background:#FFFFFF; margin-bottom:20px;">
         <table style="width:100%; border-collapse:collapse; font-size:12px;">
@@ -810,6 +903,7 @@ async function sendReportEmail({
     periodeLabel,
     summary,
     topProducts,
+    chart,
     to,
     driveInfo,
     context,

@@ -113,3 +113,39 @@ test('getFrontendBaseUrl: tautan email memakai URL frontend production, bukan lo
   assert.equal(getFrontendBaseUrl({ CORS_ORIGIN: 'http://127.0.0.1:3000' }), 'http://127.0.0.1:3000');
   assert.equal(getFrontendBaseUrl({}), 'http://localhost:3000');
 });
+
+test('buildReportHtml: email & salinan Drive menyertakan grafik omzet', () => {
+  const { buildReportHtml } = require('../services/emailService');
+  const base = {
+    periodeLabel: '2026-11-10 s/d 2026-11-16',
+    summary: { totalOmzet: 284500 },
+    topProducts: [],
+  };
+
+  const withChart = buildReportHtml({
+    ...base,
+    chart: {
+      title: 'Omzet per Hari',
+      points: [
+        { label: 'Jum', sublabel: '13/11', omzet: 96000 },
+        { label: 'Sab', sublabel: '14/11', omzet: 0 },
+        { label: 'Min', sublabel: '15/11', omzet: 188500 },
+      ],
+    },
+  });
+  assert.ok(withChart.includes('<!-- Grafik Omzet -->'));
+  assert.ok(withChart.includes('Omzet per Hari'));
+  assert.ok(withChart.includes('Total Rp 284.500'));
+  assert.ok(withChart.includes('96 rb'));
+  assert.ok(withChart.includes('189 rb'));
+  assert.ok(withChart.includes('13/11'));
+  // Batang tertinggi = tinggi plot penuh (120px), batang nol = garis tipis abu-abu
+  assert.ok(withChart.includes('height:120px'));
+  assert.ok(withChart.includes('background:#D4D4D4'));
+
+  const emptyChart = buildReportHtml({ ...base, chart: { title: 'Omzet per Jam', points: [] } });
+  assert.ok(emptyChart.includes('Belum ada omzet pada periode ini.'));
+
+  const noChart = buildReportHtml(base);
+  assert.ok(!noChart.includes('Total Rp 284.500'));
+});
