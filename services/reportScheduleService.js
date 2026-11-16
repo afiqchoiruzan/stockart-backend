@@ -165,6 +165,7 @@ async function runReportIfDue({
   try {
     await send({
       ...period,
+      ...(claimed.recipientEmail ? { email: claimed.recipientEmail } : {}),
       saveToDrive: claimed.saveToDrive !== false,
       context: 'scheduled',
       frequency: claimed.digestFrequency,

@@ -38,6 +38,12 @@ const notificationSettingSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Email penerima kustom permanen (jika null, fallback ke OWNER_EMAIL di .env)
+    recipientEmail: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     // Khusus pengaturan key "reportAutoSend": simpan salinan laporan ke Google Drive
     saveToDrive: {
       type: Boolean,

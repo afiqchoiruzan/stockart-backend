@@ -152,7 +152,7 @@ async function runDigestIfDue({
   }
 
   try {
-    await send(products, undefined, {
+    await send(products, claimed.recipientEmail || undefined, {
       context: 'digest',
       frequency: claimed.digestFrequency,
     });

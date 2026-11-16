@@ -1,5 +1,6 @@
 const Product = require('../models/Product');
 const { sendLowStockAlertEmail, validateOptionalEmailRecipients } = require('../services/emailService');
+const { getLowStockSettings } = require('../services/lowStockSettingsService');
 const { resetOutOfStockFlags } = require('../services/lowStockAlertService');
 const { recordStockEntry } = require('../services/stockEntryService');
 
@@ -144,11 +145,13 @@ exports.notifyLowStockProducts = async (req, res) => {
     }
 
     const customEmail = validateOptionalEmailRecipients(req.body?.email).normalized;
-    const emailResult = await sendLowStockAlertEmail(products, customEmail, {
+    const settings = customEmail ? null : await getLowStockSettings();
+    const effectiveRecipient = customEmail || settings?.recipientEmail || undefined;
+    const emailResult = await sendLowStockAlertEmail(products, effectiveRecipient, {
       context: 'manual',
     });
 
-    const targetLabel = customEmail
+    const targetLabel = effectiveRecipient
       ? emailResult.to
       : `email owner (${emailResult.to})`;
 

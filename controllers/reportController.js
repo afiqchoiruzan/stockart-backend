@@ -7,6 +7,7 @@ const {
     sendReport
 } = require('../services/reportService');
 const { validateOptionalEmailRecipients } = require('../services/emailService');
+const { getReportScheduleSettings } = require('../services/reportScheduleSettingsService');
 
 const getSummary = async (req, res) => {
     try {
@@ -98,14 +99,16 @@ const sendReportToOwner = async (req, res) => {
         const tanggalMulai = req.body?.tanggalMulai || req.query?.tanggalMulai;
         const tanggalAkhir = req.body?.tanggalAkhir || req.query?.tanggalAkhir;
         const customEmail = validateOptionalEmailRecipients(req.body?.email).normalized;
+        const settings = customEmail ? null : await getReportScheduleSettings();
+        const effectiveEmail = customEmail || settings?.recipientEmail || undefined;
 
         const data = await sendReport({
             tanggalMulai,
             tanggalAkhir,
-            email: customEmail
+            email: effectiveEmail
         });
 
-        const targetLabel = customEmail
+        const targetLabel = effectiveEmail
             ? data.recipient
             : `email owner (${data.recipient})`;
 

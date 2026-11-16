@@ -81,7 +81,9 @@ test('HTTP /api/notifications/low-stock/settings: RBAC, validasi, update parsial
     assert.equal(data.digestDayOfMonth, 1);
     assert.equal(data.criticalAlertEnabled, true);
     assert.equal(typeof data.emailConfigured, 'boolean');
-    assert.equal(typeof data.defaultRecipient, 'string');
+    assert.equal(typeof data.maskedRecipient, 'string');
+    assert.equal(data.isCustomRecipient, false);
+    assert.equal(data.recipientEmail, undefined, 'Email asli tidak boleh diekspos mentah');
     assert.ok(data.nextRunAt && !Number.isNaN(Date.parse(data.nextRunAt)));
     initialActivatedAt = data.scheduleActivatedAt;
   });
@@ -94,6 +96,7 @@ test('HTTP /api/notifications/low-stock/settings: RBAC, validasi, update parsial
       { digestWeekday: 7 },
       { digestDayOfMonth: 29 },
       { criticalAlertEnabled: 'true' },
+      { recipientEmail: 'bukan-email' },
       { fieldAsing: true },
     ];
     for (const body of invalidPayloads) {
@@ -140,5 +143,27 @@ test('HTTP /api/notifications/low-stock/settings: RBAC, validasi, update parsial
     assert.equal(offRes.status, 200);
     assert.equal(offRes.json.data.digestFrequency, 'off');
     assert.equal(offRes.json.data.nextRunAt, null);
+
+    // Update recipientEmail permanen -> tersimpan dan disensor bintang di response
+    const setEmailRes = await req('PUT', {
+      token: ownerToken,
+      body: { recipientEmail: 'bagas.owner@toko.id' },
+    });
+    assert.equal(setEmailRes.status, 200);
+    assert.equal(setEmailRes.json.data.maskedRecipient, 'ba***@toko.id');
+    assert.equal(setEmailRes.json.data.isCustomRecipient, true);
+
+    const fetchedEmail = await req('GET', { token: ownerToken });
+    assert.equal(fetchedEmail.status, 200);
+    assert.equal(fetchedEmail.json.data.maskedRecipient, 'ba***@toko.id');
+    assert.equal(fetchedEmail.json.data.isCustomRecipient, true);
+
+    // Reset recipientEmail ke default .env dengan string kosong
+    const resetEmailRes = await req('PUT', {
+      token: ownerToken,
+      body: { recipientEmail: '' },
+    });
+    assert.equal(resetEmailRes.status, 200);
+    assert.equal(resetEmailRes.json.data.isCustomRecipient, false);
   });
 });

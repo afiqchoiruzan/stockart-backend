@@ -563,9 +563,11 @@ test('Email laporan: gaya monokrom tanpa emoji, sama seperti email rekap stok', 
   assert.ok(!EMOJI_REGEX.test(subjectManual) && !EMOJI_REGEX.test(subjectScheduled));
 });
 
-test('Helper penerima email: getDefaultRecipientLabel dan validateOptionalEmailRecipients', () => {
+test('Helper penerima email: getDefaultRecipientLabel, maskEmailRecipients, dan validateOptionalEmailRecipients', () => {
   const {
     getDefaultRecipientLabel,
+    maskEmailAddress,
+    maskEmailRecipients,
     validateOptionalEmailRecipients,
   } = require('../services/emailService');
 
@@ -574,6 +576,15 @@ test('Helper penerima email: getDefaultRecipientLabel dan validateOptionalEmailR
     'a@toko.id, b@toko.id'
   );
   assert.equal(getDefaultRecipientLabel({}), '');
+
+  assert.equal(maskEmailAddress('owner@gmail.com'), 'ow***@gmail.com');
+  assert.equal(maskEmailAddress('ab@toko.id'), 'a*@toko.id');
+  assert.equal(maskEmailAddress('x@toko.id'), '*@toko.id');
+  assert.equal(
+    maskEmailRecipients('owner@gmail.com, admin@toko.id'),
+    'ow***@gmail.com, ad***@toko.id'
+  );
+  assert.equal(maskEmailRecipients(''), '');
 
   assert.deepEqual(validateOptionalEmailRecipients(undefined), { valid: true, normalized: undefined });
   assert.deepEqual(validateOptionalEmailRecipients('   '), { valid: true, normalized: undefined });

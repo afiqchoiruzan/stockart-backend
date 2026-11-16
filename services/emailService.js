@@ -42,6 +42,27 @@ function getDefaultRecipientLabel(env = process.env) {
 }
 
 /**
+ * Menyensor satu alamat email dengan bintang (mis. "bagas@gmail.com" -> "ba***@gmail.com").
+ */
+function maskEmailAddress(email) {
+  const trimmed = String(email || '').trim();
+  const atIndex = trimmed.indexOf('@');
+  if (atIndex <= 0) return trimmed ? '***' : '';
+  const local = trimmed.slice(0, atIndex);
+  const domain = trimmed.slice(atIndex + 1);
+  if (local.length === 1) return `*@${domain}`;
+  if (local.length === 2) return `${local[0]}*@${domain}`;
+  return `${local.slice(0, 2)}***@${domain}`;
+}
+
+/**
+ * Menyensor satu atau beberapa email (dipisah koma) dengan bintang.
+ */
+function maskEmailRecipients(raw) {
+  return parseRecipients(raw).map(maskEmailAddress).join(', ');
+}
+
+/**
  * Memvalidasi input email opsional (mendukung kosong/null = pakai default .env,
  * satu alamat email, atau beberapa alamat dipisah koma).
  */
@@ -973,6 +994,8 @@ module.exports = {
   isEmailConfigured,
   parseRecipients,
   getDefaultRecipientLabel,
+  maskEmailAddress,
+  maskEmailRecipients,
   validateOptionalEmailRecipients,
   sendEmail,
   sendLowStockAlertEmail,
