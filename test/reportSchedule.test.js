@@ -167,7 +167,13 @@ test('Laporan otomatis & ringkasan: barang masuk, produk terjual, scheduler, dan
     // 16 Nov 2026 07:05 WIB: kirim laporan 15 Nov
     const sent = await runReportIfDue({ now: new Date('2026-11-16T00:05:00Z'), send, emailConfigured });
     assert.equal(sent.status, 'sent');
-    assert.deepEqual(calls, [{ tanggalMulai: '2026-11-15', tanggalAkhir: '2026-11-15', saveToDrive: false }]);
+    assert.deepEqual(calls, [{
+      tanggalMulai: '2026-11-15',
+      tanggalAkhir: '2026-11-15',
+      saveToDrive: false,
+      context: 'scheduled',
+      frequency: 'daily',
+    }]);
 
     const again = await runReportIfDue({ now: new Date('2026-11-16T00:10:00Z'), send, emailConfigured });
     assert.equal(again.executed, false);
