@@ -3,6 +3,45 @@ const Product = require('../models/Product');
 const { buildReportHtml, sendReportEmail } = require('../services/emailService');
 const { uploadReportToDrive } = require('../services/driveService');
 
+// Seluruh laporan dihitung dalam zona waktu toko (WIB, UTC+7),
+// sama seperti filter tanggal pada riwayat transaksi.
+const TIMEZONE = 'Asia/Jakarta';
+const WIB_OFFSET = '+07:00';
+const SATU_HARI_MS = 24 * 60 * 60 * 1000;
+
+const REVENUE_INTERVALS = ['hari', 'jam'];
+
+// Urutan produk terlaris harus stabil agar halaman laporan dan email
+// menampilkan peringkat yang sama saat jumlah terjual seri.
+const TOP_PRODUCTS_SORT = {
+    totalTerjual: -1,
+    totalPendapatan: -1,
+    _id: 1
+};
+
+const isValidDateKey = (value) => {
+    return (
+        typeof value === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+        Number.isFinite(Date.parse(`${value}T00:00:00Z`)) &&
+        new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
+    );
+};
+
+// "YYYY-MM-DD" -> Date pukul 00:00 WIB pada tanggal tersebut
+const toStartOfDayWib = (tanggal, namaField) => {
+    if (!isValidDateKey(tanggal)) {
+        const error = new Error(
+            `Format ${namaField} tidak valid. Gunakan format YYYY-MM-DD`
+        );
+
+        error.statusCode = 400;
+        throw error;
+    }
+
+    return new Date(`${tanggal}T00:00:00${WIB_OFFSET}`);
+};
+
 const buildDateFilter = (tanggalMulai, tanggalAkhir) => {
     if (!tanggalMulai && !tanggalAkhir) {
         return {};
@@ -11,37 +50,16 @@ const buildDateFilter = (tanggalMulai, tanggalAkhir) => {
     const filter = {};
 
     if (tanggalMulai) {
-        const mulai = new Date(tanggalMulai);
-
-        if (isNaN(mulai.getTime())) {
-            const error = new Error(
-                'Format tanggalMulai tidak valid. Gunakan format YYYY-MM-DD'
-            );
-
-            error.statusCode = 400;
-            throw error;
-        }
-
-        filter.$gte = mulai;
+        filter.$gte = toStartOfDayWib(tanggalMulai, 'tanggalMulai');
     }
 
     if (tanggalAkhir) {
-        const akhir = new Date(tanggalAkhir);
-
-        if (isNaN(akhir.getTime())) {
-            const error = new Error(
-                'Format tanggalAkhir tidak valid. Gunakan format YYYY-MM-DD'
-            );
-
-            error.statusCode = 400;
-            throw error;
-        }
-
-        akhir.setHours(23, 59, 59, 999);
-        filter.$lte = akhir;
+        // Batas akhir eksklusif: pukul 00:00 WIB hari berikutnya
+        const akhir = toStartOfDayWib(tanggalAkhir, 'tanggalAkhir');
+        filter.$lt = new Date(akhir.getTime() + SATU_HARI_MS);
     }
 
-    if (filter.$gte && filter.$lte && filter.$gte > filter.$lte) {
+    if (tanggalMulai && tanggalAkhir && tanggalMulai > tanggalAkhir) {
         const error = new Error(
             'tanggalMulai tidak boleh lebih besar dari tanggalAkhir'
         );
@@ -51,6 +69,23 @@ const buildDateFilter = (tanggalMulai, tanggalAkhir) => {
     }
 
     return filter;
+};
+
+const parseRevenueInterval = (interval) => {
+    if (interval === undefined || interval === '') {
+        return 'hari';
+    }
+
+    if (!REVENUE_INTERVALS.includes(interval)) {
+        const error = new Error(
+            'Parameter interval tidak valid. Gunakan "hari" atau "jam"'
+        );
+
+        error.statusCode = 400;
+        throw error;
+    }
+
+    return interval;
 };
 
 const getSummary = async (req, res) => {
@@ -120,6 +155,10 @@ const getRevenue = async (req, res) => {
     try {
         const { tanggalMulai, tanggalAkhir } = req.query;
 
+        // interval=hari (default) -> omzet per tanggal WIB
+        // interval=jam -> omzet per jam WIB (00-23) dalam rentang tanggal
+        const interval = parseRevenueInterval(req.query.interval);
+
         const dateFilter = buildDateFilter(
             tanggalMulai,
             tanggalAkhir
@@ -140,8 +179,9 @@ const getRevenue = async (req, res) => {
                 $group: {
                     _id: {
                         $dateToString: {
-                            format: '%Y-%m-%d',
-                            date: '$createdAt'
+                            format: interval === 'jam' ? '%H' : '%Y-%m-%d',
+                            date: '$createdAt',
+                            timezone: TIMEZONE
                         }
                     },
                     omzet: {
@@ -160,7 +200,7 @@ const getRevenue = async (req, res) => {
         ]);
 
         const data = hasil.map((item) => ({
-            tanggal: item._id,
+            [interval === 'jam' ? 'jam' : 'tanggal']: item._id,
             omzet: item.omzet,
             jumlahTransaksi: item.jumlahTransaksi
         }));
@@ -218,9 +258,7 @@ const getTopProducts = async (req, res) => {
                 }
             },
             {
-                $sort: {
-                    totalTerjual: -1
-                }
+                $sort: TOP_PRODUCTS_SORT
             },
             {
                 $limit: 5
@@ -297,7 +335,7 @@ const sendReportToOwner = async (req, res) => {
                         totalPendapatan: { $sum: '$detailBarang.subtotal' }
                     }
                 },
-                { $sort: { totalTerjual: -1 } },
+                { $sort: TOP_PRODUCTS_SORT },
                 { $limit: 5 },
                 {
                     $lookup: {
@@ -382,5 +420,8 @@ module.exports = {
     getSummary,
     getRevenue,
     getTopProducts,
-    sendReportToOwner
+    sendReportToOwner,
+    buildDateFilter,
+    parseRevenueInterval,
+    TOP_PRODUCTS_SORT
 };
