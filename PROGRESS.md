@@ -82,6 +82,7 @@ Commit basis terbaru: `aa7bd99` (`origin/main`)
 - **Test:** tambahan di `test/product.test.js` (DB sementara) dan `test/http.test.js` (RBAC 200/401/404, `hargaBeli` tersembunyi untuk kasir, produk nonaktif tidak ketemu kasir).
 - **Dokumentasi:** `API_TESTING.md`, `README.md`, dan Postman (`Get Product by Barcode (Scan)`, variabel `{{barcode}}`).
 - **Seeder barcode dummy (`scripts/seedBarcodes.js`, `npm run seed:barcodes`):** mengisi EAN-13 `200` + 9 digit urut + check digit untuk produk tanpa barcode; idempoten, `--dry-run` (rencana saja), `--force` (nomori ulang hanya barcode dummy `200...`), error duplikat per produk tidak menghentikan proses, dan ekspor `scripts/output/barcodes.csv` (di-ignore Git). Unit test di `test/seedBarcodes.test.js`.
+- **Lembar barcode demo (`scripts/generateBarcodeSheet.js`, `npm run barcode:sheet`):** HTML kartu produk dengan SVG EAN-13 (fallback CODE128) via `bwip-js`, CSS cetak A4 12 kartu/halaman. Diverifikasi: 121/121 barcode terbaca ZXing dari screenshot layar dan dari PDF A4 150 dpi, semua sama dengan DB. Unit test di `test/generateBarcodeSheet.test.js`.
 - **Uji di DB pengembangan:** dry run tidak mengubah DB; run pertama mengisi 121/121 produk; run kedua 0 perubahan; lookup `2000000000015` → `SM001` dan `2000000000053` → `8968601001`; CSV 121 baris data.
 
 ## Perubahan Izzy (Report)
@@ -95,8 +96,8 @@ Commit basis terbaru: `aa7bd99` (`origin/main`)
 
 ```text
 npm test
-136 tests passed, 0 failed, 0 skipped (seluruh 12 file test:
-  criticalAlert.test.js, email.test.js, http.test.js,
+138 tests passed, 0 failed, 0 skipped (seluruh 13 file test:
+  criticalAlert.test.js, email.test.js, generateBarcodeSheet.test.js, http.test.js,
   lowStockDigest.test.js, lowStockSchedule.test.js,
   lowStockSettings.test.js, notificationRoutes.test.js,
   product.test.js, rbac.test.js, report.test.js,

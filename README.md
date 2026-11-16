@@ -79,6 +79,7 @@ stockart-backend/
 │   ├── reportRoutes.js           # Routing endpoint analisis & pelaporan bisnis (/api/reports)
 │   └── transactionRoutes.js      # Routing endpoint kasir & checkout (/api/transactions)
 ├── scripts/
+│   ├── generateBarcodeSheet.js   # Buat lembar cetak barcode (HTML, SVG EAN-13/CODE128) untuk demo scan
 │   ├── seed.js                   # Script inisialisasi akun pemilik default (idempotent / aman dijalankan ulang)
 │   ├── seedBarcodes.js           # Isi barcode EAN-13 dummy ("200...") untuk produk tanpa barcode + ekspor CSV
 │   └── seedProducts.js           # Script pengisian 30+ data sampel produk toko kelontong (sembako, dsb.)
@@ -92,6 +93,7 @@ stockart-backend/
 ├── test/
 │   ├── criticalAlert.test.js     # E2E test alert kritis stok = 0, reset flag saat restock/update/void
 │   ├── email.test.js             # Unit test penyusunan subjek & isi email digest, kritis, dan manual
+│   ├── generateBarcodeSheet.test.js # Unit test render SVG (EAN-13/CODE128 fallback) & HTML lembar barcode
 │   ├── http.test.js              # HTTP Integration test endpoint utama (Auth, RBAC, CRUD, Report)
 │   ├── lowStockDigest.test.js    # Test scheduler digest (atomic claim, anti-duplikat restart, retry, skip)
 │   ├── lowStockSchedule.test.js  # Unit test kalkulasi jadwal WIB UTC+7 (daily, weekly, monthly, off)
@@ -215,6 +217,19 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
    - Selesai menulis, daftar `kodeProduk,nama,barcode` disimpan di `scripts/output/barcodes.csv` (di-ignore Git)
      untuk dicetak sebagai label uji. Dry run tidak menulis CSV.
    - Script memakai koneksi `config/db.js` yang sama dengan server; pastikan `.env` menunjuk ke DB yang benar.
+
+   **Lembar barcode untuk demo (`scripts/generateBarcodeSheet.js`):**
+   ```bash
+   npm run barcode:sheet   # -> scripts/output/barcode-sheet.html
+   ```
+   - Mengambil semua produk yang punya `barcode`, lalu membuat satu halaman HTML berisi kartu
+     (nama, harga jual, gambar barcode SVG, dan angkanya). Produk aktif tampil lebih dulu; produk
+     nonaktif diberi label **Nonaktif** karena kasir akan mendapat 404 saat men-scan-nya.
+   - Barcode 13 digit dengan check digit valid dirender sebagai **EAN-13**, selain itu **CODE128**.
+     Render memakai `bwip-js` (devDependency, menghasilkan SVG langsung di Node tanpa DOM).
+   - Buka file di browser untuk scan langsung dari layar, atau cetak (Ctrl+P, A4, skala 100%):
+     3 × 4 = 12 kartu per halaman dan kartu tidak terpotong antar halaman.
+   - Tips scan dari layar: naikkan kecerahan layar dan jauhkan HP ±15–25 cm agar kamera fokus.
 
 5. **Menjalankan Pengujian Otomatis (Automated Testing):**
    Pastikan seluruh test suite lulus pengujian:
