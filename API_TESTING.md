@@ -221,6 +221,15 @@ curl -X GET http://localhost:5000/api/reports/revenue \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+### Get Revenue per Jam (Grafik Harian)
+
+Omzet dikelompokkan per jam WIB (`"jam": "00"` s/d `"23"`). Semua filter tanggal laporan (`tanggalMulai`, `tanggalAkhir`) memakai format `YYYY-MM-DD` dan dihitung dalam WIB.
+
+```bash
+curl -X GET "http://localhost:5000/api/reports/revenue?interval=jam&tanggalMulai=2026-11-16&tanggalAkhir=2026-11-16" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 ### Get Top Products (Produk Terlaris)
 
 ```bash
