@@ -232,13 +232,16 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 | | `PATCH` | `/api/products/:id/restore` | Pemilik | Mengaktifkan kembali produk yang dinonaktifkan |
 | **Notifikasi** | `GET` | `/api/notifications/low-stock/settings` | Pemilik | Melihat jadwal digest low-stock & status eksekusi terakhir |
 | | `PUT` | `/api/notifications/low-stock/settings` | Pemilik | Mengatur jadwal digest (`off`/`daily`/`weekly`/`monthly`) & alert kritis `stok = 0` |
+| | `GET` | `/api/notifications/report/settings` | Pemilik | Melihat jadwal kirim laporan otomatis & status pengiriman terakhir |
+| | `PUT` | `/api/notifications/report/settings` | Pemilik | Mengatur jadwal kirim laporan otomatis (`off`/`daily`/`weekly`/`monthly`) & simpan ke Google Drive |
 | **Transaksi**| `POST` | `/api/transactions/checkout`| Kasir / Pemilik | Checkout transaksi penjualan & pemotongan stok atomik |
 | | `GET` | `/api/transactions` | Kasir / Pemilik | Riwayat transaksi (filter tanggal WIB, status, kasir) |
 | | `GET` | `/api/transactions/:id` | Kasir / Pemilik | Detail struk transaksi lengkap |
 | | `PATCH` | `/api/transactions/:id/void` | Kasir / Pemilik | Pembatalan transaksi & pengembalian stok barang |
-| **Laporan** | `GET` | `/api/reports/summary` | Pemilik | Ringkasan total omzet, transaksi, dan produk |
+| **Laporan** | `GET` | `/api/reports/summary` | Pemilik | Ringkasan omzet, transaksi, produk, produk terjual (`totalTerjual`), dan barang masuk (`totalMasuk`) |
 | | `GET` | `/api/reports/revenue` | Pemilik | Data pendapatan per tanggal WIB untuk grafik tren (`?interval=jam` untuk per jam) |
 | | `GET` | `/api/reports/top-products` | Pemilik | 5 produk terlaris berdasarkan kuantitas & omzet |
+| | `POST` | `/api/reports/send-email` | Pemilik | Kirim laporan periode tertentu ke email owner sekarang juga (salinan PDF ke Google Drive bila diatur) |
 
 > 💡 **File Pengujian Postman:**  
 > File koleksi lengkap telah disediakan pada berkas [`StockArt_API.postman_collection.json`](./StockArt_API.postman_collection.json). Koleksi ini telah dilengkapi dengan skrip *pre-request* dan *tests* otomatis untuk menyimpan dan meneruskan token JWT ke setiap request.
