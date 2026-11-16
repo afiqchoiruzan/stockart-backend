@@ -740,3 +740,88 @@ test('HTTP: barcode unik, sparse, dan dapat dihapus lewat update', async (t) => 
   assert.equal(dupKode.status, 400);
   assert.equal(dupKode.message, 'Kode produk sudah digunakan oleh produk lain');
 });
+
+test('HTTP: lookup barcode (GET /barcode/:code) dan filter ?barcode=', async (t) => {
+  const dbName = `prd_bcl_${process.pid}_${Date.now()}`;
+  await mongoose.connect(process.env.MONGO_URI, { dbName, serverSelectionTimeoutMS: 10000 });
+  let server;
+  t.after(async () => {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    try {
+      await mongoose.connection.dropDatabase();
+    } finally {
+      await mongoose.disconnect();
+    }
+  });
+  await Promise.all([Product.init(), User.init()]);
+  const [owner, kasir] = await User.create([
+    { nama: 'Owner lookup', username: 'lookup_owner', password: 'test-only', role: 'pemilik' },
+    { nama: 'Kasir lookup', username: 'lookup_kasir', password: 'test-only', role: 'kasir' },
+  ]);
+  const ownerToken = jwt.sign({ id: owner._id }, process.env.JWT_SECRET, { expiresIn: '5m' });
+  const kasirToken = jwt.sign({ id: kasir._id }, process.env.JWT_SECRET, { expiresIn: '5m' });
+  server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}/api/products`;
+  async function get(path, token) {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await fetch(base + path, { headers });
+    return { status: response.status, ...(await response.json()) };
+  }
+
+  const aktif = await Product.create({ ...payload, nama: 'Aktif', barcode: '8990001112223' });
+  await Product.create({ ...payload, nama: 'Nonaktif', barcode: '8990009998887', aktif: false });
+  const lama = await Product.create({ ...payload, nama: 'Data lama', kodeProduk: 'LAMA-001' });
+
+  // Kasir: produk aktif ketemu tanpa hargaBeli.
+  const kasirHit = await get('/barcode/8990001112223', kasirToken);
+  assert.equal(kasirHit.status, 200, JSON.stringify(kasirHit));
+  assert.equal(kasirHit.data._id, String(aktif._id));
+  assert.equal(kasirHit.data.hargaBeli, undefined);
+  assert.equal(kasirHit.data.hargaJual, payload.hargaJual);
+
+  // Kasir: produk nonaktif → 404.
+  const kasirNonaktif = await get('/barcode/8990009998887', kasirToken);
+  assert.equal(kasirNonaktif.status, 404);
+  assert.equal(kasirNonaktif.message, 'Produk dengan barcode ini belum terdaftar');
+
+  // Pemilik: hargaBeli tampil.
+  const ownerHit = await get('/barcode/8990001112223', ownerToken);
+  assert.equal(ownerHit.status, 200);
+  assert.equal(ownerHit.data.hargaBeli, payload.hargaBeli);
+
+  // Tanpa token → 401. Kode asal-asalan → 404.
+  assert.equal((await get('/barcode/8990001112223')).status, 401);
+  const ngawur = await get('/barcode/asal-asalan-123', kasirToken);
+  assert.equal(ngawur.status, 404);
+  assert.equal(ngawur.success, false);
+  assert.equal(ngawur.message, 'Produk dengan barcode ini belum terdaftar');
+
+  // Data lama tanpa barcode tetap ketemu lewat kodeProduk (termasuk huruf kecil + spasi).
+  const viaKode = await get(`/barcode/${encodeURIComponent(' lama-001 ')}`, kasirToken);
+  assert.equal(viaKode.status, 200, JSON.stringify(viaKode));
+  assert.equal(viaKode.data._id, String(lama._id));
+
+  // Barcode diutamakan bila kode sama dengan kodeProduk produk lain.
+  const bentrokKode = await Product.create({ ...payload, nama: 'Kode bentrok', kodeProduk: 'KODE-BENTROK' });
+  const bentrokBarcode = await Product.create({ ...payload, nama: 'Barcode bentrok', barcode: 'KODE-BENTROK' });
+  const prioritas = await get('/barcode/KODE-BENTROK', ownerToken);
+  assert.equal(prioritas.data._id, String(bentrokBarcode._id));
+  assert.notEqual(prioritas.data._id, String(bentrokKode._id));
+
+  // GET /:id biasa masih berfungsi (rute tidak bentrok).
+  const byId = await get(`/${aktif._id}`, kasirToken);
+  assert.equal(byId.status, 200);
+  assert.equal(byId.data._id, String(aktif._id));
+
+  // ?barcode= mencocokkan barcode ATAU kodeProduk; kasir tidak melihat nonaktif.
+  const listBarcode = await get('?barcode=8990001112223', kasirToken);
+  assert.deepEqual(listBarcode.data.map((p) => p._id), [String(aktif._id)]);
+  assert.equal(listBarcode.data[0].hargaBeli, undefined);
+  const listKode = await get('?barcode=LAMA-001', kasirToken);
+  assert.deepEqual(listKode.data.map((p) => p._id), [String(lama._id)]);
+  assert.equal((await get('?barcode=8990009998887', kasirToken)).data.length, 0);
+  // barcode + search digabung (AND), tidak saling menimpa.
+  assert.equal((await get('?barcode=8990001112223&search=Aktif', ownerToken)).data.length, 1);
+  assert.equal((await get('?barcode=8990001112223&search=Tidakada', ownerToken)).data.length, 0);
+});

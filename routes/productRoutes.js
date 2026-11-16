@@ -6,6 +6,7 @@ const {
   getLowStockProducts,
   notifyLowStockProducts,
   getProductById,
+  getProductByBarcode,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -20,6 +21,8 @@ const { validate, productRules, productUpdateRules, restockRules } = require('..
 router.get('/', protect, getProducts);
 router.get('/low-stock', protect, getLowStockProducts);
 router.post('/low-stock/notify', protect, authorize('pemilik'), notifyLowStockProducts);
+// Harus sebelum '/:id' agar "barcode" tidak dianggap sebagai id produk
+router.get('/barcode/:code', protect, getProductByBarcode);
 router.get('/:id', protect, getProductById);
 
 // Hanya owner yang dapat mengelola produk

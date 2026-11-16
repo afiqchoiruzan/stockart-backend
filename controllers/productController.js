@@ -30,6 +30,14 @@ const getDuplicateKeyMessage = (error) => {
 const isEmptyBarcode = (v) =>
   v === null || (typeof v === 'string' && v.trim() === '');
 
+// Filter exact untuk kode hasil scan: cocok dengan `barcode` ATAU `kodeProduk`
+// (data lama belum punya barcode). kodeProduk selalu disimpan uppercase, jadi
+// pembandingnya ikut di-uppercase.
+const barcodeMatchFilter = (code) => {
+  const trimmed = String(code).trim();
+  return { $or: [{ barcode: trimmed }, { kodeProduk: trimmed.toUpperCase() }] };
+};
+
 // GET /api/products
 exports.getProducts = async (req, res) => {
   try {
@@ -48,16 +56,24 @@ exports.getProducts = async (req, res) => {
       query.aktif = true;
     }
     
+    // barcode dan search sama-sama memakai $or, jadi digabung lewat $and
+    // agar tidak saling menimpa bila keduanya dikirim.
+    const andClauses = [];
+
     if (barcode) {
-      query.kodeProduk = String(barcode).trim();
+      andClauses.push(barcodeMatchFilter(barcode));
     }
-    
+
     if (search) {
       const safeSearch = escapeRegex(search);
-      query.$or = [
+      andClauses.push({ $or: [
         { nama: { $regex: safeSearch, $options: 'i' } },
         { kodeProduk: { $regex: safeSearch, $options: 'i' } }
-      ];
+      ] });
+    }
+
+    if (andClauses.length) {
+      query.$and = andClauses;
     }
     
     if (kategori) {
@@ -143,6 +159,43 @@ exports.notifyLowStockProducts = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Gagal mengirim email peringatan stok menipis',
+      error: error.message,
+    });
+  }
+};
+
+// GET /api/products/barcode/:code
+exports.getProductByBarcode = async (req, res) => {
+  try {
+    const code = String(req.params.code || '').trim();
+    const role = req.user?.role;
+
+    const query = barcodeMatchFilter(code);
+    if (role === 'kasir') {
+      // Kasir hanya boleh melihat produk yang aktif
+      query.aktif = true;
+    }
+
+    // Maksimal 2 kandidat (barcode & kodeProduk masing-masing unik). Jika kode
+    // cocok dengan barcode satu produk dan kodeProduk produk lain, utamakan barcode.
+    const candidates = code ? await Product.find(query).limit(2) : [];
+    const product = candidates.find((p) => p.barcode === code) || candidates[0];
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Produk dengan barcode ini belum terdaftar',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: stripHargaBeliForKasir(product, role),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Gagal mencari produk berdasarkan barcode',
       error: error.message,
     });
   }
