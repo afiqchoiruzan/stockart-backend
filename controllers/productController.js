@@ -1,6 +1,7 @@
 const Product = require('../models/Product');
 const { sendLowStockAlertEmail } = require('../services/emailService');
 const { resetOutOfStockFlags } = require('../services/lowStockAlertService');
+const { recordStockEntry } = require('../services/stockEntryService');
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -161,6 +162,13 @@ exports.createProduct = async (req, res) => {
   try {
     const product = await Product.create(req.body);
 
+    await recordStockEntry({
+      product,
+      jumlah: product.stok,
+      sumber: 'produk_baru',
+      userId: req.user?._id,
+    });
+
     res.status(201).json({
       success: true,
       message: 'Produk berhasil ditambahkan',
@@ -303,6 +311,13 @@ exports.restockProduct = async (req, res) => {
       await resetOutOfStockFlags([product._id]);
       product.stokHabisNotifiedAt = null;
     }
+
+    await recordStockEntry({
+      product,
+      jumlah,
+      sumber: 'restock',
+      userId: req.user?._id,
+    });
 
     res.status(200).json({
       success: true,

@@ -4,9 +4,11 @@ dotenv.config();
 const connectDB = require('./config/db');
 const app = require('./app');
 const { startLowStockScheduler } = require('./services/lowStockDigestService');
+const { startReportScheduler } = require('./services/reportScheduleService');
 
 connectDB().then(() => {
     startLowStockScheduler();
+    startReportScheduler();
 });
 
 const PORT = process.env.PORT || 5000;

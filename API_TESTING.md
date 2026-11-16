@@ -209,8 +209,10 @@ curl -X PATCH http://localhost:5000/api/transactions/6aaa0956c41db778cffd8820/ca
 
 ### Get Summary
 
+Respons berisi `totalProduk`, `totalTransaksi`, `totalOmzet`, `totalTerjual` (jumlah unit terjual dari transaksi selesai), dan `totalMasuk` (jumlah unit barang masuk dari produk baru & restock). Riwayat barang masuk mulai tercatat sejak fitur ini aktif.
+
 ```bash
-curl -X GET http://localhost:5000/api/reports/summary \
+curl -X GET "http://localhost:5000/api/reports/summary?tanggalMulai=2026-11-10&tanggalAkhir=2026-11-16" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -278,6 +280,38 @@ curl -X PUT http://localhost:5000/api/notifications/low-stock/settings \
 ```bash
 curl -X POST http://localhost:5000/api/products/low-stock/notify \
   -H "Authorization: Bearer $TOKEN"
+```
+
+## 4c. Kirim Laporan Otomatis (Hanya Pemilik)
+
+Laporan dikirim ke email owner sesuai jadwal WIB. Rentang laporan selalu berupa hari penuh sebelum tanggal jadwal: `daily` = kemarin, `weekly` = 7 hari terakhir, `monthly` = sejak tanggal yang sama bulan lalu. Default `off` sampai owner mengaktifkannya. Pengiriman instan tetap tersedia lewat `POST /api/reports/send-email`.
+
+### Get Report Auto-Send Settings
+
+```bash
+curl -X GET http://localhost:5000/api/notifications/report/settings \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Update Report Auto-Send Settings
+
+Field yang didukung (bisa update parsial):
+- `digestFrequency`: `"off" | "daily" | "weekly" | "monthly"`
+- `digestTime`: format `"HH:mm"` (WIB UTC+7)
+- `digestWeekday`: `0..6` (`0` = Minggu, `1` = Senin, ..., `6` = Sabtu)
+- `digestDayOfMonth`: `1..28`
+- `saveToDrive`: `true | false` (butuh `GDRIVE_WEBHOOK_URL`; lihat `driveConfigured` di respons)
+
+```bash
+curl -X PUT http://localhost:5000/api/notifications/report/settings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "digestFrequency": "weekly",
+    "digestTime": "07:00",
+    "digestWeekday": 1,
+    "saveToDrive": true
+  }'
 ```
 
 ---
