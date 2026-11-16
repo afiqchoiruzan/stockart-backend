@@ -195,6 +195,7 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 
    # Pembayaran QRIS - HANYA sandbox (lihat QRIS_PAYMENT.md)
    MIDTRANS_SERVER_KEY=SB-Mid-server-xxxxxxxx
+   MIDTRANS_SIGNATURE_KEY=Mid-server-xxxxxxxx   # "Signature Secret Key" untuk verifikasi webhook
    MIDTRANS_BASE_URL=https://api.sandbox.midtrans.com
    ```
 

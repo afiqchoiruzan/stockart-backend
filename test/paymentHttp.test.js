@@ -17,7 +17,9 @@ test('alur HTTP pembayaran QRIS (buat QR, status, expired)', async (t) => {
   const realFetch = globalThis.fetch;
   const savedKey = process.env.MIDTRANS_SERVER_KEY;
   const savedUrl = process.env.MIDTRANS_BASE_URL;
+  const savedSigKey = process.env.MIDTRANS_SIGNATURE_KEY;
   process.env.MIDTRANS_SERVER_KEY = 'SB-Mid-server-dummy-test';
+  delete process.env.MIDTRANS_SIGNATURE_KEY; // signature tes dihitung dengan server key dummy
   process.env.MIDTRANS_BASE_URL = 'https://api.sandbox.midtrans.com';
 
   // Midtrans palsu: request ke sandbox dicegat, request lain (ke server tes) diteruskan.
@@ -50,6 +52,7 @@ test('alur HTTP pembayaran QRIS (buat QR, status, expired)', async (t) => {
     else process.env.MIDTRANS_SERVER_KEY = savedKey;
     if (savedUrl === undefined) delete process.env.MIDTRANS_BASE_URL;
     else process.env.MIDTRANS_BASE_URL = savedUrl;
+    if (savedSigKey !== undefined) process.env.MIDTRANS_SIGNATURE_KEY = savedSigKey;
     if (server) {
       server.closeAllConnections?.();
       await new Promise((resolve) => server.close(resolve));

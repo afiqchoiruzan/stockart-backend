@@ -185,3 +185,18 @@ test('verifyNotificationSignature: SHA512(order_id + status_code + gross_amount 
   delete process.env.MIDTRANS_SERVER_KEY;
   assert.throws(() => verifyNotificationSignature({ ...n, signature_key: expected }), /MIDTRANS_SERVER_KEY/);
 });
+
+test('verifyNotificationSignature: memakai MIDTRANS_SIGNATURE_KEY jika diisi', () => {
+  const { verifyNotificationSignature, computeNotificationSignature } = require('../services/paymentService');
+  process.env.MIDTRANS_SERVER_KEY = 'SB-Mid-server-dummy';
+  process.env.MIDTRANS_SIGNATURE_KEY = 'Mid-server-signature-dummy';
+  try {
+    const n = { order_id: 'ORD-2', status_code: '200', gross_amount: '3000.00' };
+    const bySignatureKey = computeNotificationSignature(n, 'Mid-server-signature-dummy');
+    const byServerKey = computeNotificationSignature(n, 'SB-Mid-server-dummy');
+    assert.equal(verifyNotificationSignature({ ...n, signature_key: bySignatureKey }), true);
+    assert.equal(verifyNotificationSignature({ ...n, signature_key: byServerKey }), false);
+  } finally {
+    delete process.env.MIDTRANS_SIGNATURE_KEY;
+  }
+});

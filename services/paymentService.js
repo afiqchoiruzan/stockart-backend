@@ -161,12 +161,13 @@ async function createQris(transaction, options = {}) {
 }
 
 /**
- * signature_key = SHA512(order_id + status_code + gross_amount + SERVER_KEY), hex.
+ * signature_key = SHA512(order_id + status_code + gross_amount + KEY), hex.
+ * KEY = Signature Secret Key (MIDTRANS_SIGNATURE_KEY), fallback ke Server Key.
  * gross_amount dipakai persis seperti string kiriman Midtrans (mis. "15000.00").
  */
-function computeNotificationSignature({ order_id, status_code, gross_amount }, serverKey) {
+function computeNotificationSignature({ order_id, status_code, gross_amount }, key) {
   return crypto.createHash('sha512')
-    .update(`${order_id}${status_code}${gross_amount}${serverKey}`)
+    .update(`${order_id}${status_code}${gross_amount}${key}`)
     .digest('hex');
 }
 
@@ -175,12 +176,12 @@ function computeNotificationSignature({ order_id, status_code, gross_amount }, s
  * Melempar error konfigurasi (500) jika MIDTRANS_SERVER_KEY belum diatur.
  */
 function verifyNotificationSignature(notification) {
-  const { serverKey } = getMidtransConfig();
+  const { signatureKey } = getMidtransConfig();
   const n = notification || {};
   const fields = [n.order_id, n.status_code, n.gross_amount, n.signature_key];
   if (!fields.every((value) => typeof value === 'string' && value.length > 0)) return false;
 
-  const expected = Buffer.from(computeNotificationSignature(n, serverKey), 'utf8');
+  const expected = Buffer.from(computeNotificationSignature(n, signatureKey), 'utf8');
   const received = Buffer.from(n.signature_key.toLowerCase(), 'utf8');
   return expected.length === received.length && crypto.timingSafeEqual(expected, received);
 }

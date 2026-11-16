@@ -7,6 +7,9 @@ const fail = (message) => Object.assign(new Error(message), { statusCode: 500 })
 // dan agar tes dapat mengganti process.env.
 const getMidtransConfig = () => {
     const serverKey = (process.env.MIDTRANS_SERVER_KEY || '').trim();
+    // Dashboard Midtrans versi baru memisahkan "Signature Secret Key" (untuk signature_key webhook)
+    // dari Server Key (untuk Basic auth API). Jika tidak diisi, pakai Server Key (akun lama: keduanya sama).
+    const signatureKey = (process.env.MIDTRANS_SIGNATURE_KEY || '').trim() || serverKey;
     const baseUrl = (process.env.MIDTRANS_BASE_URL || SANDBOX_BASE_URL).trim().replace(/\/+$/, '');
 
     if (!serverKey) {
@@ -25,6 +28,7 @@ const getMidtransConfig = () => {
 
     return {
         serverKey,
+        signatureKey,
         baseUrl,
         // Basic auth: base64("<SERVER_KEY>:")
         authHeader: `Basic ${Buffer.from(`${serverKey}:`).toString('base64')}`,

@@ -47,9 +47,15 @@ Catatan:
 ## Environment
 
 ```
-MIDTRANS_SERVER_KEY=<server key sandbox>        # Dashboard sandbox > Settings > Access Keys
+MIDTRANS_SERVER_KEY=<server key sandbox>        # Dashboard sandbox > Settings > Access Keys > Server Keys
+MIDTRANS_SIGNATURE_KEY=<signature secret key>   # Access Keys > "Signature Secret Key" (verifikasi webhook)
 MIDTRANS_BASE_URL=https://api.sandbox.midtrans.com
 ```
+
+Dashboard Midtrans versi baru memisahkan **Signature Secret Key** (dipakai Midtrans untuk menghitung
+`signature_key` di webhook) dari **Server Key** (Basic auth ke Core API). Jika `MIDTRANS_SIGNATURE_KEY`
+kosong, backend memakai Server Key (perilaku akun lama). Gejala salah key: log
+`[Midtrans] signature tidak valid untuk order_id=...` dan webhook dibalas 401.
 
 Cek cepat koneksi + key: `npm run qris:try` (membuat QR untuk transaksi dummy, tidak menyentuh DB).
 
