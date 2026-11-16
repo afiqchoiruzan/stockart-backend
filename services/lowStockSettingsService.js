@@ -6,7 +6,7 @@ const {
   parseDigestTime,
   getNextOccurrence,
 } = require('./lowStockSchedule');
-const { isEmailConfigured } = require('./emailService');
+const { isEmailConfigured, getDefaultRecipientLabel } = require('./emailService');
 
 const SETTINGS_KEY = 'lowStockAlert';
 const SCHEDULE_FIELDS = ['digestFrequency', 'digestTime', 'digestWeekday', 'digestDayOfMonth'];
@@ -221,7 +221,14 @@ async function updateLowStockSettings(
 /**
  * Memformat dokumen pengaturan untuk respons API (termasuk nextRunAt & status email).
  */
-function formatSettingsResponse(doc, { now = new Date(), emailConfigured = isEmailConfigured() } = {}) {
+function formatSettingsResponse(
+  doc,
+  {
+    now = new Date(),
+    emailConfigured = isEmailConfigured(),
+    defaultRecipient = getDefaultRecipientLabel(),
+  } = {}
+) {
   const nextRun = getNextOccurrence(doc, now);
   const configured = Boolean(emailConfigured);
   const staleUnconfigured = configured && doc.lastDigestStatus === 'email_not_configured';
@@ -241,6 +248,7 @@ function formatSettingsResponse(doc, { now = new Date(), emailConfigured = isEma
     lastDigestError: staleUnconfigured ? null : (doc.lastDigestError || null),
     digestAttempts: doc.digestAttempts ?? 0,
     emailConfigured: configured,
+    defaultRecipient,
   };
 }
 

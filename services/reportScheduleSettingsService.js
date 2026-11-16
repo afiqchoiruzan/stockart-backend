@@ -3,7 +3,7 @@
 const NotificationSetting = require('../models/NotificationSetting');
 const { getNextOccurrence } = require('./lowStockSchedule');
 const { validateSettingsPayload } = require('./lowStockSettingsService');
-const { isEmailConfigured } = require('./emailService');
+const { isEmailConfigured, getDefaultRecipientLabel } = require('./emailService');
 
 // Pengaturan kirim laporan otomatis disimpan sebagai dokumen singleton terpisah
 // di koleksi NotificationSetting, memakai field jadwal yang sama dengan digest low stock.
@@ -149,7 +149,12 @@ async function updateReportScheduleSettings(
  */
 function formatReportSettingsResponse(
   doc,
-  { now = new Date(), emailConfigured = isEmailConfigured(), driveConfigured = isDriveConfigured() } = {}
+  {
+    now = new Date(),
+    emailConfigured = isEmailConfigured(),
+    driveConfigured = isDriveConfigured(),
+    defaultRecipient = getDefaultRecipientLabel(),
+  } = {}
 ) {
   const nextRun = getNextOccurrence(doc, now);
   const configured = Boolean(emailConfigured);
@@ -170,6 +175,7 @@ function formatReportSettingsResponse(
     digestAttempts: doc.digestAttempts ?? 0,
     emailConfigured: configured,
     driveConfigured: Boolean(driveConfigured),
+    defaultRecipient,
   };
 }
 

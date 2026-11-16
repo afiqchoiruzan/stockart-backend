@@ -13,6 +13,7 @@
 
 const { validateSettingsPayload } = require('../services/lowStockSettingsService');
 const { validateReportSettingsPayload } = require('../services/reportScheduleSettingsService');
+const { validateOptionalEmailRecipients } = require('../services/emailService');
 
 // ─── Helpers internal ────────────────────────────────────────────────────────
 
@@ -206,6 +207,15 @@ const lowStockSettingsRules = (body) => validateSettingsPayload(body).errors;
  */
 const reportSettingsRules = (body) => validateReportSettingsPayload(body).errors;
 
+/**
+ * POST /api/products/low-stock/notify & POST /api/reports/send-email
+ * { email? } — opsional; jika dikirim, harus format email valid
+ */
+const manualEmailRules = (body) => {
+  const result = validateOptionalEmailRecipients(body?.email);
+  return result.valid ? [] : [result.message];
+};
+
 // ─── Middleware pabrik ────────────────────────────────────────────────────────
 
 /**
@@ -239,4 +249,5 @@ module.exports = {
   restockRules,
   lowStockSettingsRules,
   reportSettingsRules,
+  manualEmailRules,
 };

@@ -81,6 +81,7 @@ test('HTTP /api/notifications/low-stock/settings: RBAC, validasi, update parsial
     assert.equal(data.digestDayOfMonth, 1);
     assert.equal(data.criticalAlertEnabled, true);
     assert.equal(typeof data.emailConfigured, 'boolean');
+    assert.equal(typeof data.defaultRecipient, 'string');
     assert.ok(data.nextRunAt && !Number.isNaN(Date.parse(data.nextRunAt)));
     initialActivatedAt = data.scheduleActivatedAt;
   });

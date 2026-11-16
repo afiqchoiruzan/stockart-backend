@@ -22,6 +22,8 @@ function formatNetworkError(err) {
   return new Error(err.code || err.name || 'Koneksi jaringan gagal');
 }
 
+const SIMPLE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /**
  * Memecah daftar email penerima yang dipisahkan koma menjadi array alamat bersih.
  */
@@ -30,6 +32,43 @@ function parseRecipients(raw) {
     .split(',')
     .map((email) => email.trim())
     .filter(Boolean);
+}
+
+/**
+ * Mengembalikan daftar email default (`OWNER_EMAIL`) terformat rapi untuk ditampilkan ke pemilik.
+ */
+function getDefaultRecipientLabel(env = process.env) {
+  return parseRecipients(env?.OWNER_EMAIL).join(', ');
+}
+
+/**
+ * Memvalidasi input email opsional (mendukung kosong/null = pakai default .env,
+ * satu alamat email, atau beberapa alamat dipisah koma).
+ */
+function validateOptionalEmailRecipients(raw) {
+  if (raw === undefined || raw === null) {
+    return { valid: true, normalized: undefined };
+  }
+  if (typeof raw !== 'string') {
+    return { valid: false, message: 'email tujuan harus berupa teks' };
+  }
+  if (/[\r\n]/.test(raw)) {
+    return { valid: false, message: 'email tujuan mengandung karakter tidak valid' };
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { valid: true, normalized: undefined };
+  }
+
+  const recipients = parseRecipients(trimmed);
+  if (recipients.length === 0 || recipients.some((item) => !SIMPLE_EMAIL_REGEX.test(item))) {
+    return {
+      valid: false,
+      message: 'Format email tujuan tidak valid (gunakan alamat email yang benar, pisahkan koma jika lebih dari satu)',
+    };
+  }
+
+  return { valid: true, normalized: recipients.join(', ') };
 }
 
 /**
@@ -932,6 +971,9 @@ async function sendReportEmail({
 
 module.exports = {
   isEmailConfigured,
+  parseRecipients,
+  getDefaultRecipientLabel,
+  validateOptionalEmailRecipients,
   sendEmail,
   sendLowStockAlertEmail,
   buildLowStockEmailSubject,

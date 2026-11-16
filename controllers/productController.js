@@ -1,5 +1,5 @@
 const Product = require('../models/Product');
-const { sendLowStockAlertEmail } = require('../services/emailService');
+const { sendLowStockAlertEmail, validateOptionalEmailRecipients } = require('../services/emailService');
 const { resetOutOfStockFlags } = require('../services/lowStockAlertService');
 const { recordStockEntry } = require('../services/stockEntryService');
 
@@ -143,13 +143,18 @@ exports.notifyLowStockProducts = async (req, res) => {
       });
     }
 
-    const emailResult = await sendLowStockAlertEmail(products, req.body?.email, {
+    const customEmail = validateOptionalEmailRecipients(req.body?.email).normalized;
+    const emailResult = await sendLowStockAlertEmail(products, customEmail, {
       context: 'manual',
     });
 
+    const targetLabel = customEmail
+      ? emailResult.to
+      : `email owner (${emailResult.to})`;
+
     res.status(200).json({
       success: true,
-      message: `Notifikasi peringatan ${products.length} produk stok menipis berhasil dikirim ke email owner (${emailResult.to})`,
+      message: `Notifikasi peringatan ${products.length} produk stok menipis berhasil dikirim ke ${targetLabel}`,
       data: {
         sent: true,
         count: products.length,

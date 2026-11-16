@@ -6,6 +6,7 @@ const {
     buildReportPdf,
     sendReport
 } = require('../services/reportService');
+const { validateOptionalEmailRecipients } = require('../services/emailService');
 
 const getSummary = async (req, res) => {
     try {
@@ -96,7 +97,7 @@ const sendReportToOwner = async (req, res) => {
     try {
         const tanggalMulai = req.body?.tanggalMulai || req.query?.tanggalMulai;
         const tanggalAkhir = req.body?.tanggalAkhir || req.query?.tanggalAkhir;
-        const customEmail = req.body?.email;
+        const customEmail = validateOptionalEmailRecipients(req.body?.email).normalized;
 
         const data = await sendReport({
             tanggalMulai,
@@ -104,11 +105,15 @@ const sendReportToOwner = async (req, res) => {
             email: customEmail
         });
 
+        const targetLabel = customEmail
+            ? data.recipient
+            : `email owner (${data.recipient})`;
+
         res.status(200).json({
             success: true,
             message: data.drive.uploaded
-                ? `Laporan berhasil dikirim ke email owner (${data.recipient}) dan disimpan ke Google Drive`
-                : `Laporan berhasil dikirim ke email owner (${data.recipient})`,
+                ? `Laporan berhasil dikirim ke ${targetLabel} dan disimpan ke Google Drive`
+                : `Laporan berhasil dikirim ke ${targetLabel}`,
             data
         });
     } catch (error) {
