@@ -96,14 +96,53 @@ function buildTransactionFilter(range = {}) {
 }
 
 /**
- * Ringkasan laporan: omzet, jumlah transaksi, produk terjual, dan barang masuk.
+ * Tahap agregasi per produk dari detail transaksi: unit terjual, pendapatan, dan modal (HPP).
+ * Modal memakai snapshot hargaBeli saat checkout; item lama tanpa snapshot memakai
+ * hargaBeli produk saat ini (unitTanpaSnapshot) sehingga labanya berupa estimasi.
+ */
+const PER_PRODUCT_SALES_STAGES = [
+  { $unwind: '$detailBarang' },
+  {
+    $group: {
+      _id: '$detailBarang.produk',
+      totalTerjual: { $sum: '$detailBarang.jumlah' },
+      totalPendapatan: { $sum: '$detailBarang.subtotal' },
+      modalSnapshot: {
+        $sum: {
+          $multiply: ['$detailBarang.jumlah', { $ifNull: ['$detailBarang.hargaBeli', 0] }],
+        },
+      },
+      unitTanpaSnapshot: {
+        $sum: {
+          $cond: [{ $eq: [{ $type: '$detailBarang.hargaBeli' }, 'missing'] }, '$detailBarang.jumlah', 0],
+        },
+      },
+    },
+  },
+];
+
+// Setelah $lookup produk: modal = snapshot + (unit tanpa snapshot × hargaBeli produk saat ini)
+const TOTAL_MODAL_EXPR = {
+  $add: [
+    '$modalSnapshot',
+    {
+      $multiply: [
+        '$unitTanpaSnapshot',
+        { $ifNull: [{ $arrayElemAt: ['$produk.hargaBeli', 0] }, 0] },
+      ],
+    },
+  ],
+};
+
+/**
+ * Ringkasan laporan: omzet, laba kotor, jumlah transaksi, produk terjual, dan barang masuk.
  * totalProduk menghitung seluruh produk, atau hanya produk aktif bila activeOnly.
  */
 async function getReportSummary(range = {}, { activeOnly = false } = {}) {
   const filterTransaksi = buildTransactionFilter(range);
   const filterMasuk = buildCreatedAtFilter(range);
 
-  const [totalProduk, totalTransaksi, hasilOmzet, hasilTerjual, hasilMasuk] = await Promise.all([
+  const [totalProduk, totalTransaksi, hasilOmzet, hasilPenjualan, hasilMasuk] = await Promise.all([
     Product.countDocuments(activeOnly ? { aktif: true } : {}),
     Transaction.countDocuments(filterTransaksi),
     Transaction.aggregate([
@@ -112,8 +151,24 @@ async function getReportSummary(range = {}, { activeOnly = false } = {}) {
     ]),
     Transaction.aggregate([
       { $match: filterTransaksi },
-      { $unwind: '$detailBarang' },
-      { $group: { _id: null, totalTerjual: { $sum: '$detailBarang.jumlah' } } },
+      ...PER_PRODUCT_SALES_STAGES,
+      {
+        $lookup: {
+          from: 'products',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'produk',
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalTerjual: { $sum: '$totalTerjual' },
+          totalPendapatan: { $sum: '$totalPendapatan' },
+          totalModal: { $sum: TOTAL_MODAL_EXPR },
+          unitTanpaSnapshot: { $sum: '$unitTanpaSnapshot' },
+        },
+      },
     ]),
     StockEntry.aggregate([
       { $match: filterMasuk },
@@ -121,12 +176,19 @@ async function getReportSummary(range = {}, { activeOnly = false } = {}) {
     ]),
   ]);
 
+  const penjualan = hasilPenjualan[0] || {};
+  const totalModal = penjualan.totalModal || 0;
+
   return {
     totalProduk,
     totalTransaksi,
     totalOmzet: hasilOmzet.length > 0 ? hasilOmzet[0].totalOmzet : 0,
-    totalTerjual: hasilTerjual.length > 0 ? hasilTerjual[0].totalTerjual : 0,
+    totalTerjual: penjualan.totalTerjual || 0,
     totalMasuk: hasilMasuk.length > 0 ? hasilMasuk[0].totalMasuk : 0,
+    totalModal,
+    totalLaba: (penjualan.totalPendapatan || 0) - totalModal,
+    // true bila sebagian transaksi lama belum punya snapshot harga beli
+    labaEstimasi: (penjualan.unitTanpaSnapshot || 0) > 0,
   };
 }
 
@@ -160,19 +222,12 @@ async function getRevenueSeries(range = {}, interval = 'hari') {
 }
 
 /**
- * 5 produk terlaris berdasarkan jumlah terjual dalam rentang tanggal.
+ * 5 produk terlaris berdasarkan jumlah terjual dalam rentang tanggal, beserta laba kotornya.
  */
 async function getTopProducts(range = {}) {
   return Transaction.aggregate([
     { $match: buildTransactionFilter(range) },
-    { $unwind: '$detailBarang' },
-    {
-      $group: {
-        _id: '$detailBarang.produk',
-        totalTerjual: { $sum: '$detailBarang.jumlah' },
-        totalPendapatan: { $sum: '$detailBarang.subtotal' },
-      },
-    },
+    ...PER_PRODUCT_SALES_STAGES,
     { $sort: TOP_PRODUCTS_SORT },
     { $limit: 5 },
     {
@@ -183,14 +238,15 @@ async function getTopProducts(range = {}) {
         as: 'produk',
       },
     },
-    { $unwind: '$produk' },
+    { $match: { 'produk.0': { $exists: true } } },
     {
       $project: {
         _id: 0,
         produkId: '$_id',
-        namaProduk: '$produk.nama',
+        namaProduk: { $arrayElemAt: ['$produk.nama', 0] },
         totalTerjual: 1,
         totalPendapatan: 1,
+        totalLaba: { $subtract: ['$totalPendapatan', TOTAL_MODAL_EXPR] },
       },
     },
   ]);

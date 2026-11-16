@@ -196,6 +196,7 @@ function drawSummary(canvas, top, summary) {
 
   const rows = [
     ['Total Omzet', formatRp(data.totalOmzet)],
+    [data.labaEstimasi ? 'Laba Kotor (estimasi)' : 'Laba Kotor', formatRp(data.totalLaba)],
     ['Transaksi Selesai', `${formatUnit(data.totalTransaksi)} struk`],
     ['Produk Terjual', `${formatUnit(data.totalTerjual)} unit`],
     ['Barang Masuk', `${formatUnit(data.totalMasuk)} unit`],
@@ -207,9 +208,9 @@ function drawSummary(canvas, top, summary) {
     drawRowBackground(canvas, cursor, rowHeight, idx);
     canvas.text(label, MARGIN + 12, cursor + 14.5, { size: 9, color: COLORS.body });
     canvas.text(value, right, cursor + 14.5, {
-      size: idx === 0 ? 11 : 9.5,
+      size: idx <= 1 ? 11 : 9.5,
       bold: true,
-      color: idx === 0 ? COLORS.black : COLORS.text,
+      color: idx <= 1 ? COLORS.black : COLORS.text,
       align: 'right',
     });
     cursor += rowHeight;
