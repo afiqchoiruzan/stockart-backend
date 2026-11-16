@@ -149,3 +149,26 @@ test('buildReportHtml: email & salinan Drive menyertakan grafik omzet', () => {
   const noChart = buildReportHtml(base);
   assert.ok(!noChart.includes('Total Rp 284.500'));
 });
+
+test('Laba kotor tampil di email & PDF laporan, dengan tanda estimasi bila perlu', () => {
+  const { buildReportHtml } = require('../services/emailService');
+  const { generateReportPdfBuffer } = require('../services/pdfService');
+  const summary = { totalOmzet: 284500, totalLaba: 61500, labaEstimasi: false };
+
+  const html = buildReportHtml({ periodeLabel: '2026-11-10 s/d 2026-11-16', summary, topProducts: [] });
+  assert.ok(html.includes('Laba Kotor'));
+  assert.ok(html.includes('Rp 61.500'));
+  assert.ok(!html.includes('(estimasi)'));
+
+  const htmlEstimasi = buildReportHtml({
+    periodeLabel: '2026-11-10 s/d 2026-11-16',
+    summary: { ...summary, labaEstimasi: true },
+    topProducts: [],
+  });
+  assert.ok(htmlEstimasi.includes('(estimasi)'));
+
+  const pdf = generateReportPdfBuffer({ periodeLabel: 'x', summary: { ...summary, labaEstimasi: true }, topProducts: [] })
+    .toString('latin1');
+  assert.ok(pdf.includes(String.raw`(Laba Kotor \(estimasi\))`));
+  assert.ok(pdf.includes('(Rp 61.500)'));
+});
