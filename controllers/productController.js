@@ -69,7 +69,8 @@ exports.getProducts = async (req, res) => {
       const safeSearch = escapeRegex(search);
       andClauses.push({ $or: [
         { nama: { $regex: safeSearch, $options: 'i' } },
-        { kodeProduk: { $regex: safeSearch, $options: 'i' } }
+        { kodeProduk: { $regex: safeSearch, $options: 'i' } },
+        { barcode: { $regex: safeSearch, $options: 'i' } }
       ] });
     }
 

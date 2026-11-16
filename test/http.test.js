@@ -318,6 +318,19 @@ test('GET /api/products?barcode= — kasir dapat memfilter dengan barcode (200)'
   assert.equal(body.data[0].hargaBeli, undefined);
 });
 
+test('GET /api/products?search= — kasir dapat mencari lewat barcode di parameter search (200)', async () => {
+  const partialBarcode = TEST_BARCODE.slice(0, 8);
+  const { status, body } = await req(
+    baseUrl,
+    'GET',
+    `/api/products?search=${partialBarcode}`,
+    { token: tokenKasir }
+  );
+  assert.equal(status, 200);
+  assert.deepEqual(body.data.map((p) => p._id), [createdProductId]);
+  assert.equal(body.data[0].hargaBeli, undefined);
+});
+
 test('PUT /api/products/:id — barcode kosong menghapus barcode (200)', async () => {
   assert.ok(createdProductId);
   const { status, body } = await req(
