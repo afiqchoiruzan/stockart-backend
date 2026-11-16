@@ -1,8 +1,8 @@
-# StockArt Backend Progress
+# Stockart Backend Progress
 
-Tanggal pemeriksaan: 2026-09-26
+Tanggal pemeriksaan: 2026-11-16
 Branch kerja: `main`
-Commit basis terbaru: `1c16952` (`origin/main`)
+Commit basis terbaru: `aa7bd99` (`origin/main`)
 
 ## Ringkasan Status
 
@@ -12,12 +12,12 @@ Commit basis terbaru: `1c16952` (`origin/main`)
 | Afiq | Register, bcrypt, login, JWT, dan middleware role | Selesai dengan Hardening Penuh | Register kasir sekarang wajib diotorisasi oleh role `pemilik` (mencegah pendaftaran kasir liar). |
 | Afiq | Proteksi route Product, Transaction, dan Report | Selesai | Seluruh rute API terproteksi JWT & RBAC (`pemilik`/`kasir`). |
 | Afiq | Seed script akun pemilik | Selesai | `scripts/seed.js` untuk membuat akun pemilik pertama. Aman dijalankan berulang kali. |
-| Afiq | Pengujian RBAC dan HTTP Test | Selesai | 37 test lulus: 4 unit RBAC + 33 HTTP integration test (Auth, RBAC Register, Product, Transaction, Report, & Validasi Input). |
+| Afiq | Pengujian RBAC dan HTTP Test | Selesai | Unit RBAC dan HTTP integration test lengkap seluruh endpoint & validasi input. |
 | Afiq | Dokumentasi API & Postman Collection | Selesai | `StockArt_API.postman_collection.json` v2.1 dan panduan `API_TESTING.md` siap pakai. |
 | Afiq | Staging/deployment | Live 24/7 di Railway | Backend aktif 24 jam nonstop di `https://stockart-backend-production.up.railway.app` (Non-Vercel, No-CC). |
-| Bgs | Product schema | Selesai | Mencakup nama, kode produk, kategori, harga, stok, satuan, stok minimum, deskripsi, dan status aktif. |
-| Bgs | CRUD Product | Selesai | GET list, GET detail, POST, PUT, dan DELETE tersedia. POST/PUT/DELETE dibatasi untuk `pemilik`. |
-| Bgs | Restock, low-stock, pencarian, dan filter | Dalam Pengerjaan | Menunggu filter query pencarian dan stok menipis. |
+| Bgs | Product schema | Selesai | Mencakup nama, kode produk (unik & auto `PRD-<UUID>`), kategori, harga, stok, satuan, stok minimum, deskripsi, status aktif, dan `stokHabisNotifiedAt`. |
+| Bgs | CRUD Product | Selesai | GET list (strip `hargaBeli` untuk kasir), GET detail, POST, PUT, soft/hard DELETE, dan restore; pesan jelas untuk duplikat `kodeProduk`. |
+| Bgs | Restock, low-stock, pencarian, filter, & alert terjadwal | Selesai | Restock `$inc`, filter search/kategori/barcode/aktif, `/low-stock` (strip `hargaBeli` untuk kasir), digest terjadwal WIB, alert kritis `stok = 0`, dan endpoint `/api/notifications/low-stock/settings`. |
 | Ocha | Transaction schema | Selesai | Schema transaksi sudah tersedia. |
 | Ocha | Draft transaksi dan kalkulasi subtotal | Selesai | Validasi produk, jumlah, dan kalkulasi total sudah tersedia. |
 | Ocha | Checkout dengan pemotongan stok | Implementasi selesai | Checkout atomik, validasi stok/produk aktif, rollback, dan snapshot harga. |
@@ -51,10 +51,15 @@ Commit basis terbaru: `1c16952` (`origin/main`)
 - **Fitur Restore Produk:** Menambahkan endpoint `PATCH /api/products/:id/restore` khusus pemilik untuk mengaktifkan kembali produk yang telah dinonaktifkan (`aktif: true`).
 - **Filter Katalog Aktif:** `GET /api/products` secara default hanya menampilkan produk aktif di katalog toko, serta mendukung query parameter `?aktif=all` (semua status) dan `?aktif=false` (hanya produk dinonaktifkan). Endpoint `GET /api/products/low-stock` juga difilter hanya untuk produk aktif.
 - **Pencarian & Barcode:** Menambahkan pencarian fleksibel berbasis nama/kode produk (`search`), kategori (`kategori`), dan exact match untuk alat barcode scanner (`barcode`) pada endpoint `GET /api/products`.
-- **Peringatan Stok Menipis:** Menambahkan endpoint `GET /api/products/low-stock` menggunakan ekspresi query `$expr: { $lte: ['$stok', '$stokMinimum'] }` dengan urutan stok terendah.
+- **Peringatan Stok Menipis & Hybrid Alert System:**
+  - Endpoint `GET /api/products/low-stock` menggunakan ekspresi query `$expr: { $lte: ['$stok', '$stokMinimum'] }` dengan urutan stok terendah dan menyembunyikan `hargaBeli` untuk role `kasir`.
+  - **Digest Terjadwal (`lowStockSchedule.js`, `lowStockDigestService.js`):** scheduler persistent berbasis WIB UTC+7 (`off | daily | weekly | monthly`) dengan klaim slot atomik di MongoDB (`NotificationSetting`), tahan restart, catch-up jadwal terlewat, retry maks 3x, serta pembersihan status usang `email_not_configured`.
+  - **Alert Kritis Instan `stok = 0` (`lowStockAlertService.js`):** mengirim email kritis 1x saat transaksi checkout kasir menghabiskan stok (`stok <= 0`) dan mereset flag `stokHabisNotifiedAt` otomatis saat restock, edit produk, atau void transaksi.
+  - **Manual Trigger & Pengaturan Jadwal:** endpoint `POST /api/products/low-stock/notify` serta `GET/PUT /api/notifications/low-stock/settings` khusus role `pemilik`.
+  - **Email Template Monokrom (`emailService.js`):** mendukung Brevo HTTP API + fallback SMTP dengan desain monokrom + aksen merah tanpa emoji, judul teratas `Stockart`, dan konteks subject/header/footer (`digest`, `critical`, `manual`).
 - **Fungsi Restock:** Menambahkan endpoint `PATCH /api/products/:id/restock` dengan operator `$inc` dan validasi jumlah bilangan positif minimal 1.
-- **Validasi & Integritas Stok:** Menambahkan validasi `productRules`, `productUpdateRules`, dan `restockRules` di `middleware/validate.js` serta constraint schema `min: [0]` guna mencegah stok bernilai negatif.
-- **Katalog Seeding:** Menambahkan `scripts/seedProducts.js` berisi 30+ sampel produk toko kelontong (Sembako, Minuman, Cemilan, Kebersihan & Perawatan Diri, Alat Tulis) lengkap dengan sampel produk stok menipis untuk demo.
+- **Validasi & Integritas Stok:** Menambahkan validasi `productRules`, `productUpdateRules`, `restockRules`, dan `lowStockSettingsRules` di `middleware/validate.js`, constraint schema `min: [0]`, serta pesan spesifik jika `kodeProduk` duplikat.
+- **Katalog Seeding:** Menambahkan `scripts/seedProducts.js` berisi 50 sampel produk toko kelontong (Sembako, Minuman, Cemilan, Kebersihan, Perawatan Diri, Alat Tulis, Umum) lengkap dengan sampel produk stok menipis untuk demo.
 
 ## Pembaruan Ocha (Transaction)
 
@@ -73,36 +78,25 @@ Commit basis terbaru: `1c16952` (`origin/main`)
 - Menambahkan query produk terlaris `GET /api/reports/top-products` (`$unwind`, `$group`, `$sort: { totalTerjual: -1 }`, `$limit: 5`) dengan nama produk, kuantitas terjual, dan total omzet per produk.
 - Mengamankan seluruh rute laporan dengan RBAC khusus role `pemilik` di `routes/reportRoutes.js`.
 
-## Validasi & Test Suite
+## Validasi & Test Suite (Pembaruan 2026-11-16)
 
 ```text
 npm test
-37 tests passed, 0 failed
-  4  unit test RBAC          (test/rbac.test.js)
-  33 HTTP integration test   (test/http.test.js)
-     - 20 RBAC & happy path (Auth, Product, Transaction, Report)
-     -  9 validasi input gagal
-     -  4 tes otorisasi register kasir baru oleh pemilik
+121 tests passed, 0 failed, 0 skipped (seluruh 11 file test:
+  criticalAlert.test.js, email.test.js, http.test.js,
+  lowStockDigest.test.js, lowStockSchedule.test.js,
+  lowStockSettings.test.js, notificationRoutes.test.js,
+  product.test.js, rbac.test.js, report.test.js, transaction.test.js)
 
-node scripts/seed.js
-Akun pemilik "pemilik" terverifikasi di database MongoDB Atlas
-
-node --check index.js
-node --check app.js
-node --check controllers/productController.js
-node --check controllers/transactionController.js
-node --check controllers/reportController.js
-git diff --check
+Frontend (stockart-frontend):
+npm run lint   -> 0 error
+npm run build  -> 15 route built sukses
 ```
 
-## Langkah Berikutnya
+## Langkah Selanjutnya (Deployment & Maintenance)
 
-1. Bgs menyelesaikan restock, low-stock, pencarian, filter, dan pencegahan stok negatif.
-2. Tim Afiq/Bgs/Ocha menjalankan penerimaan bersama menggunakan skenario di `TRANSACTION_API.md`.
-3. Frontend mengintegrasikan kontrak transaksi dan menjalankan UAT sebelum code freeze.
-4. Izzy menambahkan fitur ekspor PDF dan pengiriman email laporan otomatis (G6 No. 2).
-5. Deploy Frontend ke Cloudflare Pages dan hubungkan ke backend Railway.
-6. Konfigurasi custom domain (DomaiNesia) ke frontend dan backend.
+1. Merge PR perbaikan final produk/kasir (`fix/product-polish-and-progress-docs` di backend & `fix/product-lowstock-and-error-ux` di frontend) ke `main`.
+2. Pastikan auto-deploy Railway (backend) & Vercel (frontend) aktif serta environment variables produksi (`MONGO_URI`, `JWT_SECRET`, `CORS_ORIGIN`, `BREVO_API_KEY`, `EMAIL_FROM`, `OWNER_EMAIL`) terkonfigurasi lengkap.
 
 
 ## Pembaruan Ocha — 2026-09-29
