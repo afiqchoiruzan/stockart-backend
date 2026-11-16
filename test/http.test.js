@@ -364,6 +364,30 @@ test('GET /api/reports/revenue — pemilik BISA akses laporan omzet (200)', asyn
   assert.ok(Array.isArray(body.data));
 });
 
+test('GET /api/reports/revenue?interval=jam — pemilik BISA akses omzet per jam (200)', async () => {
+  const { status, body } = await req(
+    baseUrl,
+    'GET',
+    '/api/reports/revenue?interval=jam&tanggalMulai=2026-11-16&tanggalAkhir=2026-11-16',
+    { token: tokenPemilik }
+  );
+  assert.equal(status, 200, JSON.stringify(body));
+  assert.equal(body.success, true);
+  assert.ok(Array.isArray(body.data));
+  for (const item of body.data) {
+    assert.match(item.jam, /^\d{2}$/);
+    assert.ok(typeof item.omzet === 'number');
+  }
+});
+
+test('GET /api/reports/revenue — interval tidak valid ditolak (400)', async () => {
+  const { status, body } = await req(baseUrl, 'GET', '/api/reports/revenue?interval=minggu', {
+    token: tokenPemilik,
+  });
+  assert.equal(status, 400, JSON.stringify(body));
+  assert.equal(body.success, false);
+});
+
 test('GET /api/reports/top-products — pemilik BISA akses laporan top products (200)', async () => {
   const { status, body } = await req(baseUrl, 'GET', '/api/reports/top-products', {
     token: tokenPemilik,
