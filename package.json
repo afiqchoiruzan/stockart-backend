@@ -5,7 +5,10 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "seed:barcodes": "node scripts/seedBarcodes.js",
+    "barcode:sheet": "node scripts/generateBarcodeSheet.js",
+    "qris:try": "node scripts/tryQris.js"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +24,7 @@
     "mongoose": "^9.10.0"
   },
   "devDependencies": {
+    "bwip-js": "^4.11.4",
     "nodemon": "^3.1.14"
   },
   "repository": {

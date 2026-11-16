@@ -17,6 +17,15 @@ const productSchema = new mongoose.Schema(
             trim: true,
             uppercase: true,
         },
+        // Barcode fisik produk (EAN/UPC/Code128, dll). Opsional; sengaja tanpa default
+        // agar produk tanpa barcode tidak menyimpan field ini sama sekali — index sparse
+        // hanya memeriksa keunikan pada dokumen yang memiliki barcode.
+        barcode: {
+            type: String,
+            trim: true,
+            unique: true,
+            sparse: true,
+        },
         kategori: {
             type: String,
             trim: true,

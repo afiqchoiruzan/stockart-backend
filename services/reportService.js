@@ -87,7 +87,12 @@ function buildCreatedAtFilter(range = {}) {
 }
 
 function buildTransactionFilter(range = {}) {
-  return { status: 'selesai', ...buildCreatedAtFilter(range) };
+  return {
+    status: 'selesai',
+    // QRIS yang belum lunas tidak dihitung; transaksi lama tanpa field ini tetap ikut.
+    paymentStatus: { $nin: ['pending', 'expired', 'failed'] },
+    ...buildCreatedAtFilter(range)
+  };
 }
 
 /**

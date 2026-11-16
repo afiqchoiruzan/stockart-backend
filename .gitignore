@@ -8,3 +8,9 @@ CLAUDE.md
 # Folder workspace lokal Postman (dibuat otomatis saat repo dibuka di Postman Local Mode)
 .postman/
 /postman/
+
+# Hasil script seed (mis. scripts/output/barcodes.csv untuk cetak barcode uji)
+scripts/output/
+
+.agents/
+.claude/

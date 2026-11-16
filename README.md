@@ -30,7 +30,7 @@ https://documenter.getpostman.com/view/42234832/2sBYB4M79y
 
 Repositori ini berfokus pada **StockArt Backend**, yaitu fondasi server penyedia layanan **RESTful API** yang aman, tangguh, dan terukur. Layanan backend ini bertanggung jawab atas:
 - **Autentikasi & Otorisasi Pengguna:** Pengelolaan sesi stateless berbasis JSON Web Token (JWT) yang diperkuat dengan *Role-Based Access Control* (RBAC) antara peran `pemilik` dan `kasir`. Registrasi kasir baru wajib diotorisasi oleh pemilik untuk mencegah pendaftaran liar.
-- **Katalog & Manajemen Stok Terintegrasi:** CRUD produk, pelacakan stok masuk (*restock*), peringatan dini stok menipis (*low-stock warning*), pencarian fleksibel nama/kategori/barcode scanner, serta dukungan *soft delete* untuk menjaga integritas data masa lalu.
+- **Katalog & Manajemen Stok Terintegrasi:** CRUD produk, pelacakan stok masuk (*restock*), peringatan dini stok menipis (*low-stock warning*), pencarian fleksibel nama/kategori/barcode scanner (field `barcode` opsional & unik, lookup scan via `GET /api/products/barcode/:code`), serta dukungan *soft delete* untuk menjaga integritas data masa lalu.
 - **Pemrosesan Transaksi Atomik:** Pencatatan struk belanja, snapshot harga produk saat transaksi, kalkulasi subtotal, pemotongan stok otomatis secara atomik (*ACID transaction session* di MongoDB), serta pembatalan transaksi (*void*) yang aman dan mengembalikan stok secara terkontrol.
 - **Analisis & Laporan Bisnis:** Agregasi omzet harian, ringkasan performa penjualan berdasarkan rentang tanggal, dan peringkat produk terlaris (*top products*) untuk membantu pemilik toko mengambil keputusan strategis.
 
@@ -79,7 +79,9 @@ stockart-backend/
 │   ├── reportRoutes.js           # Routing endpoint analisis & pelaporan bisnis (/api/reports)
 │   └── transactionRoutes.js      # Routing endpoint kasir & checkout (/api/transactions)
 ├── scripts/
+│   ├── generateBarcodeSheet.js   # Buat lembar cetak barcode (HTML, SVG EAN-13/CODE128) untuk demo scan
 │   ├── seed.js                   # Script inisialisasi akun pemilik default (idempotent / aman dijalankan ulang)
+│   ├── seedBarcodes.js           # Isi barcode EAN-13 dummy ("200...") untuk produk tanpa barcode + ekspor CSV
 │   └── seedProducts.js           # Script pengisian 30+ data sampel produk toko kelontong (sembako, dsb.)
 ├── services/
 │   ├── emailService.js           # Layanan pengiriman email (Brevo HTTP API & Nodemailer SMTP) termasuk template digest/kritis
@@ -91,6 +93,7 @@ stockart-backend/
 ├── test/
 │   ├── criticalAlert.test.js     # E2E test alert kritis stok = 0, reset flag saat restock/update/void
 │   ├── email.test.js             # Unit test penyusunan subjek & isi email digest, kritis, dan manual
+│   ├── generateBarcodeSheet.test.js # Unit test render SVG (EAN-13/CODE128 fallback) & HTML lembar barcode
 │   ├── http.test.js              # HTTP Integration test endpoint utama (Auth, RBAC, CRUD, Report)
 │   ├── lowStockDigest.test.js    # Test scheduler digest (atomic claim, anti-duplikat restart, retry, skip)
 │   ├── lowStockSchedule.test.js  # Unit test kalkulasi jadwal WIB UTC+7 (daily, weekly, monthly, off)
@@ -98,6 +101,7 @@ stockart-backend/
 │   ├── notificationRoutes.test.js# HTTP + RBAC test GET/PUT /api/notifications/low-stock/settings
 │   ├── product.test.js           # Integration test controller produk (CRUD, restock, trigger manual low-stock)
 │   ├── rbac.test.js              # Unit test fungsional middleware otorisasi RBAC (pemilik vs kasir)
+│   ├── seedBarcodes.test.js      # Unit test check digit EAN-13, penomoran dummy, rencana idempoten, dan CSV
 │   └── transaction.test.js       # Unit test transaksi atomik, rollback, void, dan pemotongan stok
 ├── .env.example                 # Template variabel lingkungan (Environment Variables)
 ├── .gitignore                   # Daftar file dan direktori yang diabaikan oleh Git
@@ -188,6 +192,11 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
    MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/stockart?retryWrites=true&w=majority
    JWT_SECRET=rahasia-kunci-jwt-anda-yang-sangat-panjang-dan-acak
    CORS_ORIGIN=http://localhost:3000
+
+   # Pembayaran QRIS - HANYA sandbox (lihat QRIS_PAYMENT.md)
+   MIDTRANS_SERVER_KEY=SB-Mid-server-xxxxxxxx
+   MIDTRANS_SIGNATURE_KEY=Mid-server-xxxxxxxx   # "Signature Secret Key" untuk verifikasi webhook
+   MIDTRANS_BASE_URL=https://api.sandbox.midtrans.com
    ```
 
 4. **Inisialisasi Data Default (Seeding):**
@@ -198,7 +207,34 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 
    # 2. Isi katalog 30+ sampel produk toko kelontong
    node scripts/seedProducts.js
+
+   # 3. (Opsional) Isi barcode dummy untuk uji scan barcode
+   npm run seed:barcodes -- --dry-run   # lihat rencana saja, DB tidak diubah
+   npm run seed:barcodes                # isi produk yang belum punya barcode
    ```
+
+   **Barcode dummy (`scripts/seedBarcodes.js`):**
+   - Format EAN-13: `"200"` + 9 digit nomor urut + 1 check digit (mis. `2000000000015`). Prefix `200` adalah
+     rentang *in-store* (sirkulasi internal), jadi tidak bentrok dengan barcode pabrik.
+   - Idempoten: produk yang sudah punya barcode dilewati; nomor urut dilanjutkan dari barcode dummy tertinggi di DB.
+   - `--force` menomori ulang semua barcode dummy (`200...`) mulai dari 1. Barcode lain (mis. barcode pabrik
+     yang diisi manual) **tidak pernah** ditimpa.
+   - Selesai menulis, daftar `kodeProduk,nama,barcode` disimpan di `scripts/output/barcodes.csv` (di-ignore Git)
+     untuk dicetak sebagai label uji. Dry run tidak menulis CSV.
+   - Script memakai koneksi `config/db.js` yang sama dengan server; pastikan `.env` menunjuk ke DB yang benar.
+
+   **Lembar barcode untuk demo (`scripts/generateBarcodeSheet.js`):**
+   ```bash
+   npm run barcode:sheet   # -> scripts/output/barcode-sheet.html
+   ```
+   - Mengambil semua produk yang punya `barcode`, lalu membuat satu halaman HTML berisi kartu
+     (nama, harga jual, gambar barcode SVG, dan angkanya). Produk aktif tampil lebih dulu; produk
+     nonaktif diberi label **Nonaktif** karena kasir akan mendapat 404 saat men-scan-nya.
+   - Barcode 13 digit dengan check digit valid dirender sebagai **EAN-13**, selain itu **CODE128**.
+     Render memakai `bwip-js` (devDependency, menghasilkan SVG langsung di Node tanpa DOM).
+   - Buka file di browser untuk scan langsung dari layar, atau cetak (Ctrl+P, A4, skala 100%):
+     3 × 4 = 12 kartu per halaman dan kartu tidak terpotong antar halaman.
+   - Tips scan dari layar: naikkan kecerahan layar dan jauhkan HP ±15–25 cm agar kamera fokus.
 
 5. **Menjalankan Pengujian Otomatis (Automated Testing):**
    Pastikan seluruh test suite lulus pengujian:
@@ -221,9 +257,10 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 | **Auth** | `POST` | `/api/auth/login` | Publik | Login pengguna & mendapatkan token JWT |
 | | `POST` | `/api/auth/register` | Pemilik | Pendaftaran akun kasir baru (diproteksi) |
 | | `GET` | `/api/auth/me` | Kasir / Pemilik | Mendapatkan profil akun yang sedang login |
-| **Produk** | `GET` | `/api/products` | Kasir / Pemilik | Katalog produk aktif (dukung search, kategori, barcode) |
+| **Produk** | `GET` | `/api/products` | Kasir / Pemilik | Katalog produk aktif (dukung search, kategori, `?barcode=` exact ke `barcode` atau `kodeProduk`) |
 | | `GET` | `/api/products/low-stock` | Kasir / Pemilik | Daftar produk dengan stok di bawah batas minimum |
 | | `POST` | `/api/products/low-stock/notify` | Pemilik | Kirim rekap email low-stock secara manual ke email pemilik |
+| | `GET` | `/api/products/barcode/:code` | Kasir / Pemilik | Lookup produk hasil scan (exact `barcode` atau `kodeProduk`); kasir hanya produk aktif tanpa `hargaBeli`, 404 jika belum terdaftar |
 | | `GET` | `/api/products/:id` | Kasir / Pemilik | Detail produk berdasarkan ID |
 | | `POST` | `/api/products` | Pemilik | Menambahkan produk baru |
 | | `PUT` | `/api/products/:id` | Pemilik | Memperbarui informasi produk |
@@ -238,11 +275,17 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 | | `GET` | `/api/transactions` | Kasir / Pemilik | Riwayat transaksi (filter tanggal WIB, status, kasir) |
 | | `GET` | `/api/transactions/:id` | Kasir / Pemilik | Detail struk transaksi lengkap |
 | | `PATCH` | `/api/transactions/:id/void` | Kasir / Pemilik | Pembatalan transaksi & pengembalian stok barang |
+| | `GET` | `/api/transactions/:id/status` | Kasir / Pemilik | Status pembayaran untuk polling QRIS (hanya membaca) |
+| **Pembayaran** | `POST` | `/api/payments/qris` | Kasir / Pemilik | Buat transaksi QRIS pending + QR dinamis Midtrans (sandbox) |
+| | `POST` | `/api/payments/webhook` | Midtrans (signature) | Notifikasi Midtrans; satu-satunya jalan status menjadi *paid* |
 | **Laporan** | `GET` | `/api/reports/summary` | Pemilik | Ringkasan omzet, transaksi, produk, produk terjual (`totalTerjual`), dan barang masuk (`totalMasuk`) |
 | | `GET` | `/api/reports/revenue` | Pemilik | Data pendapatan per tanggal WIB untuk grafik tren (`?interval=jam` untuk per jam) |
 | | `GET` | `/api/reports/top-products` | Pemilik | 5 produk terlaris berdasarkan kuantitas & omzet |
 | | `GET` | `/api/reports/pdf` | Pemilik | Unduh PDF laporan periode tertentu (ringkasan, grafik omzet, produk terlaris; sama dengan lampiran email) |
 | | `POST` | `/api/reports/send-email` | Pemilik | Kirim laporan periode tertentu ke email owner sekarang juga (salinan PDF ke Google Drive bila diatur) |
+
+> 💳 **Pembayaran QRIS:** panduan env, ngrok, Notification URL, checklist uji, dan daftar perubahan untuk production
+> ada di [`QRIS_PAYMENT.md`](./QRIS_PAYMENT.md).
 
 > 💡 **File Pengujian Postman:**  
 > File koleksi lengkap telah disediakan pada berkas [`StockArt_API.postman_collection.json`](./StockArt_API.postman_collection.json). Koleksi ini telah dilengkapi dengan skrip *pre-request* dan *tests* otomatis untuk menyimpan dan meneruskan token JWT ke setiap request.

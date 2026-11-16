@@ -43,6 +43,14 @@ exports.getTransactionById = async (req, res) => {
   } catch (error) { sendError(res, error); }
 };
 
+// Polling status pembayaran (QRIS). Tidak pernah mengubah status menjadi paid.
+exports.getTransactionStatus = async (req, res) => {
+  try {
+    const data = await service.getPaymentStatus(req.params.id, req.user);
+    res.json({ success: true, data });
+  } catch (error) { sendError(res, error); }
+};
+
 exports.draftTransaction = async (req, res) => {
   try {
     const draft = await service.calculateTransactionDetail(req.body.detailBarang);

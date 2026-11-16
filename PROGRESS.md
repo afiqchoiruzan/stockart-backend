@@ -17,6 +17,7 @@ Commit basis terbaru: `aa7bd99` (`origin/main`)
 | Afiq | Staging/deployment | Live 24/7 di Railway | Backend aktif 24 jam nonstop di `https://stockart-backend-production.up.railway.app` (Non-Vercel, No-CC). |
 | Bgs | Product schema | Selesai | Mencakup nama, kode produk (unik & auto `PRD-<UUID>`), kategori, harga, stok, satuan, stok minimum, deskripsi, status aktif, dan `stokHabisNotifiedAt`. |
 | Bgs | CRUD Product | Selesai | GET list (strip `hargaBeli` untuk kasir), GET detail, POST, PUT, soft/hard DELETE, dan restore; pesan jelas untuk duplikat `kodeProduk`. |
+| Ocha | Barcode produk & lookup scan (backend) | Selesai | Field `barcode` opsional/unik/sparse, `?barcode=` mencocokkan `barcode` atau `kodeProduk`, endpoint `GET /api/products/barcode/:code`, seeder EAN-13 dummy, lembar barcode. Frontend scan kamera (kasir & form pemilik) selesai dan lolos QA (lihat bagian QA Barcode). |
 | Bgs | Restock, low-stock, pencarian, filter, & alert terjadwal | Selesai | Restock `$inc`, filter search/kategori/barcode/aktif, `/low-stock` (strip `hargaBeli` untuk kasir), digest terjadwal WIB, alert kritis `stok = 0`, dan endpoint `/api/notifications/low-stock/settings`. |
 | Ocha | Transaction schema | Selesai | Schema transaksi sudah tersedia. |
 | Ocha | Draft transaksi dan kalkulasi subtotal | Selesai | Validasi produk, jumlah, dan kalkulasi total sudah tersedia. |
@@ -71,6 +72,35 @@ Commit basis terbaru: `aa7bd99` (`origin/main`)
 - Memperbarui dokumentasi kontrak frontend di `TRANSACTION_API.md` dan koleksi Postman.
 - Menambahkan test suite `test/transaction.test.js` mencakup rollback, checkout/void bersamaan, validasi stok, dan filter tanggal WIB.
 
+## Pembaruan Ocha — Barcode Scan Backend (2026-11-16, branch `feature/barcode-scan`)
+
+- **Field `barcode` di Product:** opsional, `trim`, `unique` + `sparse` (tanpa default, sehingga banyak produk tanpa barcode tidak saling bentrok). `kodeProduk` tidak berubah.
+- **Validasi:** `barcode` 4–48 karakter tanpa spasi pada `productRules` & `productUpdateRules`. `""`/`null` berarti tanpa barcode; pada update, barcode kosong di-`$unset` (bukan disimpan `""`).
+- **Pesan duplikat per field:** `"Barcode sudah digunakan oleh produk lain"` vs `"Kode produk sudah digunakan oleh produk lain"` (dibaca dari `keyPattern` error E11000).
+- **Pencarian:** `GET /api/products?barcode=` kini exact (trim) ke `barcode` **atau** `kodeProduk`, digabung dengan `?search=` lewat `$and`.
+- **Lookup scan:** `GET /api/products/barcode/:code` (pemilik & kasir, didaftarkan sebelum `/:id`). Kasir hanya produk aktif tanpa `hargaBeli`; barcode diutamakan atas `kodeProduk`; 404 `"Produk dengan barcode ini belum terdaftar"`.
+- **Test:** tambahan di `test/product.test.js` (DB sementara) dan `test/http.test.js` (RBAC 200/401/404, `hargaBeli` tersembunyi untuk kasir, produk nonaktif tidak ketemu kasir).
+- **Dokumentasi:** `API_TESTING.md`, `README.md`, dan Postman (`Get Product by Barcode (Scan)`, variabel `{{barcode}}`).
+- **Seeder barcode dummy (`scripts/seedBarcodes.js`, `npm run seed:barcodes`):** mengisi EAN-13 `200` + 9 digit urut + check digit untuk produk tanpa barcode; idempoten, `--dry-run` (rencana saja), `--force` (nomori ulang hanya barcode dummy `200...`), error duplikat per produk tidak menghentikan proses, dan ekspor `scripts/output/barcodes.csv` (di-ignore Git). Unit test di `test/seedBarcodes.test.js`.
+- **Lembar barcode demo (`scripts/generateBarcodeSheet.js`, `npm run barcode:sheet`):** HTML kartu produk dengan SVG EAN-13 (fallback CODE128) via `bwip-js`, CSS cetak A4 12 kartu/halaman. Diverifikasi: 121/121 barcode terbaca ZXing dari screenshot layar dan dari PDF A4 150 dpi, semua sama dengan DB. Unit test di `test/generateBarcodeSheet.test.js`.
+- **Uji di DB pengembangan:** dry run tidak mengubah DB; run pertama mengisi 121/121 produk; run kedua 0 perubahan; lookup `2000000000015` → `SM001` dan `2000000000053` → `8968601001`; CSV 121 baris data.
+
+### Ringkasan fitur barcode (backend)
+
+| Bagian | Isi |
+| --- | --- |
+| Field | `Product.barcode`: String, opsional, `trim`, `unique` + `sparse`, tanpa default. `kodeProduk` tetap terpisah. |
+| Endpoint | `GET /api/products/barcode/:code` (lookup scan, pemilik & kasir); `GET /api/products?barcode=` (filter exact `barcode` atau `kodeProduk`); `POST`/`PUT /api/products` menerima `barcode` (`""` pada `PUT` = hapus). |
+| Script seed | `npm run seed:barcodes` (`--dry-run`, `--force`) → EAN-13 `200…` + `scripts/output/barcodes.csv`. |
+| Lembar barcode | `npm run barcode:sheet` → `scripts/output/barcode-sheet.html` (EAN-13, fallback CODE128, label "Nonaktif"). |
+| Dokumentasi | `API_TESTING.md` (Get Product By Barcode, Filter by Barcode, aturan field), Postman `Get Product by Barcode (Scan)`, body `Update Product` dengan `{{barcode}}`, query `?barcode=` (disabled) di `Search & Filter Products`. |
+
+## Pembaruan Ocha — Barcode Scan Frontend & QA (2026-11-16, branch `feature/barcode-scan` di kedua repo)
+
+- **Frontend:** komponen `BarcodeScanner` (kamera via `@zxing/browser`, EAN-13 + CODE128), tombol Scan di POS kasir (scan beruntun, kamera tetap terbuka), field Barcode + Scan di form produk pemilik (sekali scan, konfirmasi ganti barcode, error duplikat di field), barcode tampil & bisa dicari di daftar produk pemilik dan kasir. Detail di `README.md` repo frontend.
+- **QA di database uji lokal** (MongoDB lokal replica set, bukan Atlas): 50 produk `seedProducts.js` + `seed:barcodes` + `barcode:sheet`, 1 produk stok 0, 1 produk nonaktif berbarcode, 1 produk lama tanpa barcode. Hasil: alur kasir 10/10, alur pemilik 5/5, kamera/perangkat lolos di Chrome 148 dan Firefox 157 (desktop, kamera simulasi). Belum diuji di HP fisik (Chrome Android/Safari iOS) karena butuh HTTPS end-to-end.
+- **Catatan menjalankan `npm test`:** `test/http.test.js` memakai `MONGO_URI` tanpa `dbName` terpisah sehingga data uji (mis. "Produk Test HTTP") tertulis ke DB yang ditunjuk `.env`. Untuk QA, jalankan dengan `MONGO_URI` ke MongoDB lokal (replica set, karena checkout memakai transaksi), mis. `MONGO_URI="mongodb://127.0.0.1:27018/stockart_test?replicaSet=rsqa" npm test`.
+
 ## Perubahan Izzy (Report)
 
 - Menambahkan endpoint statistik ringkas `GET /api/reports/summary` (total produk, total transaksi selesai, total omzet) dengan filter rentang tanggal.
@@ -82,11 +112,12 @@ Commit basis terbaru: `aa7bd99` (`origin/main`)
 
 ```text
 npm test
-121 tests passed, 0 failed, 0 skipped (seluruh 11 file test:
-  criticalAlert.test.js, email.test.js, http.test.js,
+138 tests passed, 0 failed, 0 skipped (seluruh 13 file test:
+  criticalAlert.test.js, email.test.js, generateBarcodeSheet.test.js, http.test.js,
   lowStockDigest.test.js, lowStockSchedule.test.js,
   lowStockSettings.test.js, notificationRoutes.test.js,
-  product.test.js, rbac.test.js, report.test.js, transaction.test.js)
+  product.test.js, rbac.test.js, report.test.js,
+  seedBarcodes.test.js, transaction.test.js)
 
 Frontend (stockart-frontend):
 npm run lint   -> 0 error

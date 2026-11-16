@@ -213,6 +213,27 @@
 					"response": []
 				},
 				{
+					"name": "Get Product by Barcode (Scan)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/products/barcode/{{barcode}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"products",
+								"barcode",
+								"{{barcode}}"
+							]
+						},
+						"description": "Lookup satu produk dari hasil scan barcode (Pemilik & Kasir). Kode dicocokkan exact ke `barcode` ATAU `kodeProduk`; barcode diutamakan. Kasir hanya mendapat produk aktif tanpa `hargaBeli`. Tidak ditemukan: 404 \"Produk dengan barcode ini belum terdaftar\"."
+					},
+					"response": []
+				},
+				{
 					"name": "Create Product (Pemilik Only)",
 					"event": [
 						{
@@ -269,7 +290,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"nama\": \"Buku Tulis Sidu 38 Lembar (Updated)\",\n  \"hargaJual\": 5000,\n  \"stok\": 60\n}"
+							"raw": "{\n  \"nama\": \"Buku Tulis Sidu 38 Lembar (Updated)\",\n  \"hargaJual\": 5000,\n  \"stok\": 60,\n  \"barcode\": \"{{barcode}}\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/products/{{product_id}}",
@@ -282,7 +303,7 @@
 								"{{product_id}}"
 							]
 						},
-						"description": "Memperbarui informasi produk (Hanya role Pemilik)."
+						"description": "Memperbarui informasi produk (Hanya role Pemilik). Field `barcode` opsional (4-48 karakter tanpa spasi, unik); kirim `\"barcode\": \"\"` untuk menghapus barcode."
 					},
 					"response": []
 				},
@@ -354,9 +375,9 @@
 								},
 								{
 									"key": "barcode",
-									"value": "12345",
+									"value": "{{barcode}}",
 									"disabled": true,
-									"description": "Cari lewat exact barcode"
+									"description": "Exact match ke barcode ATAU kodeProduk"
 								}
 							]
 						},
@@ -845,6 +866,11 @@
 		{
 			"key": "product_id",
 			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "barcode",
+			"value": "8991234567890",
 			"type": "string"
 		},
 		{
