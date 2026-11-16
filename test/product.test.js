@@ -273,12 +273,20 @@ test('E2E Logika Product Lengkap (CRUD, Filter, Restock, Soft/Hard Delete, Resto
     strictAssert.equal(resDup.status, 400);
     strictAssert.equal(resDup.json.message, 'Kode produk sudah digunakan oleh produk lain');
 
-    const resDupPut = await api(`/api/products/${createdZeroProductId}`, {
+    const resImmutablePut = await api(`/api/products/${createdZeroProductId}`, {
       method: 'PUT',
-      body: { kodeProduk: 'gula-001' },
+      body: { kodeProduk: 'gula-001', nama: 'Sabun Lifebuoy Merah Baru' },
     });
-    strictAssert.equal(resDupPut.status, 400);
-    strictAssert.equal(resDupPut.json.message, 'Kode produk sudah digunakan oleh produk lain');
+    strictAssert.equal(resImmutablePut.status, 200);
+    strictAssert.equal(resImmutablePut.json.data.nama, 'Sabun Lifebuoy Merah Baru');
+    strictAssert.equal(resImmutablePut.json.data.kodeProduk, 'SBN-001');
+
+    const resRevertName = await api(`/api/products/${createdZeroProductId}`, {
+      method: 'PUT',
+      body: { nama: 'Sabun Lifebuoy Merah' },
+    });
+    strictAssert.equal(resRevertName.status, 200);
+    strictAssert.equal(resRevertName.json.data.nama, 'Sabun Lifebuoy Merah');
 
     // 1e. Validasi productRules: nama kosong, angka negatif, kodeProduk spasi kosong
     const invalidPayloads = [

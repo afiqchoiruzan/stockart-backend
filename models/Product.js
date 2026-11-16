@@ -13,6 +13,7 @@ const productSchema = new mongoose.Schema(
             default: () => `PRD-${randomUUID().toUpperCase()}`,
             required: [true, 'Kode produk harus diisi'],
             unique: true,
+            immutable: true,
             trim: true,
             uppercase: true,
         },
