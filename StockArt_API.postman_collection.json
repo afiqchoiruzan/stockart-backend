@@ -638,6 +638,40 @@
 					"response": []
 				},
 				{
+					"name": "Get Revenue Hourly (Laporan Omzet per Jam)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/reports/revenue?interval=jam&tanggalMulai=2026-11-16&tanggalAkhir=2026-11-16",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"reports",
+								"revenue"
+							],
+							"query": [
+								{
+									"key": "interval",
+									"value": "jam"
+								},
+								{
+									"key": "tanggalMulai",
+									"value": "2026-11-16"
+								},
+								{
+									"key": "tanggalAkhir",
+									"value": "2026-11-16"
+								}
+							]
+						},
+						"description": "Laporan omzet yang dikelompokkan per jam WIB (00-23) untuk grafik harian (Hanya role Pemilik)."
+					},
+					"response": []
+				},
+				{
 					"name": "Get Top Products (Produk Terlaris)",
 					"request": {
 						"method": "GET",

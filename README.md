@@ -237,7 +237,7 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 | | `GET` | `/api/transactions/:id` | Kasir / Pemilik | Detail struk transaksi lengkap |
 | | `PATCH` | `/api/transactions/:id/void` | Kasir / Pemilik | Pembatalan transaksi & pengembalian stok barang |
 | **Laporan** | `GET` | `/api/reports/summary` | Pemilik | Ringkasan total omzet, transaksi, dan produk |
-| | `GET` | `/api/reports/revenue` | Pemilik | Data pendapatan harian untuk grafik tren |
+| | `GET` | `/api/reports/revenue` | Pemilik | Data pendapatan per tanggal WIB untuk grafik tren (`?interval=jam` untuk per jam) |
 | | `GET` | `/api/reports/top-products` | Pemilik | 5 produk terlaris berdasarkan kuantitas & omzet |
 
 > 💡 **File Pengujian Postman:**  
