@@ -81,6 +81,8 @@ Commit basis terbaru: `aa7bd99` (`origin/main`)
 - **Lookup scan:** `GET /api/products/barcode/:code` (pemilik & kasir, didaftarkan sebelum `/:id`). Kasir hanya produk aktif tanpa `hargaBeli`; barcode diutamakan atas `kodeProduk`; 404 `"Produk dengan barcode ini belum terdaftar"`.
 - **Test:** tambahan di `test/product.test.js` (DB sementara) dan `test/http.test.js` (RBAC 200/401/404, `hargaBeli` tersembunyi untuk kasir, produk nonaktif tidak ketemu kasir).
 - **Dokumentasi:** `API_TESTING.md`, `README.md`, dan Postman (`Get Product by Barcode (Scan)`, variabel `{{barcode}}`).
+- **Seeder barcode dummy (`scripts/seedBarcodes.js`, `npm run seed:barcodes`):** mengisi EAN-13 `200` + 9 digit urut + check digit untuk produk tanpa barcode; idempoten, `--dry-run` (rencana saja), `--force` (nomori ulang hanya barcode dummy `200...`), error duplikat per produk tidak menghentikan proses, dan ekspor `scripts/output/barcodes.csv` (di-ignore Git). Unit test di `test/seedBarcodes.test.js`.
+- **Uji di DB pengembangan:** dry run tidak mengubah DB; run pertama mengisi 121/121 produk; run kedua 0 perubahan; lookup `2000000000015` → `SM001` dan `2000000000053` → `8968601001`; CSV 121 baris data.
 
 ## Perubahan Izzy (Report)
 
@@ -93,11 +95,12 @@ Commit basis terbaru: `aa7bd99` (`origin/main`)
 
 ```text
 npm test
-131 tests passed, 0 failed, 0 skipped (seluruh 11 file test:
+136 tests passed, 0 failed, 0 skipped (seluruh 12 file test:
   criticalAlert.test.js, email.test.js, http.test.js,
   lowStockDigest.test.js, lowStockSchedule.test.js,
   lowStockSettings.test.js, notificationRoutes.test.js,
-  product.test.js, rbac.test.js, report.test.js, transaction.test.js)
+  product.test.js, rbac.test.js, report.test.js,
+  seedBarcodes.test.js, transaction.test.js)
 
 Frontend (stockart-frontend):
 npm run lint   -> 0 error

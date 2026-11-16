@@ -80,6 +80,7 @@ stockart-backend/
 │   └── transactionRoutes.js      # Routing endpoint kasir & checkout (/api/transactions)
 ├── scripts/
 │   ├── seed.js                   # Script inisialisasi akun pemilik default (idempotent / aman dijalankan ulang)
+│   ├── seedBarcodes.js           # Isi barcode EAN-13 dummy ("200...") untuk produk tanpa barcode + ekspor CSV
 │   └── seedProducts.js           # Script pengisian 30+ data sampel produk toko kelontong (sembako, dsb.)
 ├── services/
 │   ├── emailService.js           # Layanan pengiriman email (Brevo HTTP API & Nodemailer SMTP) termasuk template digest/kritis
@@ -98,6 +99,7 @@ stockart-backend/
 │   ├── notificationRoutes.test.js# HTTP + RBAC test GET/PUT /api/notifications/low-stock/settings
 │   ├── product.test.js           # Integration test controller produk (CRUD, restock, trigger manual low-stock)
 │   ├── rbac.test.js              # Unit test fungsional middleware otorisasi RBAC (pemilik vs kasir)
+│   ├── seedBarcodes.test.js      # Unit test check digit EAN-13, penomoran dummy, rencana idempoten, dan CSV
 │   └── transaction.test.js       # Unit test transaksi atomik, rollback, void, dan pemotongan stok
 ├── .env.example                 # Template variabel lingkungan (Environment Variables)
 ├── .gitignore                   # Daftar file dan direktori yang diabaikan oleh Git
@@ -198,7 +200,21 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 
    # 2. Isi katalog 30+ sampel produk toko kelontong
    node scripts/seedProducts.js
+
+   # 3. (Opsional) Isi barcode dummy untuk uji scan barcode
+   npm run seed:barcodes -- --dry-run   # lihat rencana saja, DB tidak diubah
+   npm run seed:barcodes                # isi produk yang belum punya barcode
    ```
+
+   **Barcode dummy (`scripts/seedBarcodes.js`):**
+   - Format EAN-13: `"200"` + 9 digit nomor urut + 1 check digit (mis. `2000000000015`). Prefix `200` adalah
+     rentang *in-store* (sirkulasi internal), jadi tidak bentrok dengan barcode pabrik.
+   - Idempoten: produk yang sudah punya barcode dilewati; nomor urut dilanjutkan dari barcode dummy tertinggi di DB.
+   - `--force` menomori ulang semua barcode dummy (`200...`) mulai dari 1. Barcode lain (mis. barcode pabrik
+     yang diisi manual) **tidak pernah** ditimpa.
+   - Selesai menulis, daftar `kodeProduk,nama,barcode` disimpan di `scripts/output/barcodes.csv` (di-ignore Git)
+     untuk dicetak sebagai label uji. Dry run tidak menulis CSV.
+   - Script memakai koneksi `config/db.js` yang sama dengan server; pastikan `.env` menunjuk ke DB yang benar.
 
 5. **Menjalankan Pengujian Otomatis (Automated Testing):**
    Pastikan seluruh test suite lulus pengujian:
