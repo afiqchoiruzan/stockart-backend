@@ -259,7 +259,7 @@ test('E2E Logika Product Lengkap (CRUD, Filter, Restock, Soft/Hard Delete, Resto
     strictAssert.equal(resZero.status, 201);
     createdZeroProductId = resZero.json.data._id;
 
-    // 1d. Duplikat kodeProduk -> 400
+    // 1d. Duplikat kodeProduk pada POST & PUT -> 400 dengan pesan spesifik
     const resDup = await api('/api/products', {
       method: 'POST',
       body: {
@@ -271,6 +271,14 @@ test('E2E Logika Product Lengkap (CRUD, Filter, Restock, Soft/Hard Delete, Resto
       },
     });
     strictAssert.equal(resDup.status, 400);
+    strictAssert.equal(resDup.json.message, 'Kode produk sudah digunakan oleh produk lain');
+
+    const resDupPut = await api(`/api/products/${createdZeroProductId}`, {
+      method: 'PUT',
+      body: { kodeProduk: 'gula-001' },
+    });
+    strictAssert.equal(resDupPut.status, 400);
+    strictAssert.equal(resDupPut.json.message, 'Kode produk sudah digunakan oleh produk lain');
 
     // 1e. Validasi productRules: nama kosong, angka negatif, kodeProduk spasi kosong
     const invalidPayloads = [
@@ -446,6 +454,14 @@ test('E2E Logika Product Lengkap (CRUD, Filter, Restock, Soft/Hard Delete, Resto
     strictAssert.equal(resLow.json.data.length, 2);
     strictAssert.equal(resLow.json.data[0]._id, createdZeroProductId);
     strictAssert.equal(resLow.json.data[1]._id, createdLowProductId);
+    strictAssert.equal(typeof resLow.json.data[0].hargaBeli, 'number');
+
+    // Kasir tidak boleh melihat hargaBeli pada GET /api/products/low-stock
+    const resLowKasir = await api('/api/products/low-stock', { token: kasirToken });
+    strictAssert.equal(resLowKasir.status, 200);
+    strictAssert.equal(resLowKasir.json.data.length, 2);
+    strictAssert.equal(resLowKasir.json.data[0].hargaBeli, undefined);
+    strictAssert.equal(resLowKasir.json.data[1].hargaBeli, undefined);
 
     // Setup env SMTP sementara + mock tls.connect
     const prevEnv = {

@@ -11,6 +11,9 @@ const stripHargaBeliForKasir = (item, role) => {
   return obj;
 };
 
+const isDuplicateKeyError = (error) =>
+  error?.code === 11000 || /E11000/i.test(error?.message || '');
+
 // GET /api/products
 exports.getProducts = async (req, res) => {
   try {
@@ -72,9 +75,14 @@ exports.getLowStockProducts = async (req, res) => {
       $expr: { $lte: ['$stok', '$stokMinimum'] }
     }).sort({ stok: 1 });
 
+    const role = req.user?.role;
+    const data = role === 'kasir'
+      ? products.map((p) => stripHargaBeliForKasir(p, role))
+      : products;
+
     res.status(200).json({
       success: true,
-      data: products,
+      data,
     });
   } catch (error) {
     res.status(500).json({
@@ -159,9 +167,12 @@ exports.createProduct = async (req, res) => {
       data: product,
     });
   } catch (error) {
+    const message = isDuplicateKeyError(error)
+      ? 'Kode produk sudah digunakan oleh produk lain'
+      : 'Gagal menambahkan produk';
     res.status(400).json({
       success: false,
-      message: 'Gagal menambahkan produk',
+      message,
       error: error.message,
     });
   }
@@ -197,9 +208,12 @@ exports.updateProduct = async (req, res) => {
       data: product,
     });
   } catch (error) {
+    const message = isDuplicateKeyError(error)
+      ? 'Kode produk sudah digunakan oleh produk lain'
+      : 'Gagal memperbarui produk';
     res.status(400).json({
       success: false,
-      message: 'Gagal memperbarui produk',
+      message,
       error: error.message,
     });
   }
