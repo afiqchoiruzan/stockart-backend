@@ -62,6 +62,28 @@ const transactionSchema = new mongoose.Schema(
             enum: ['selesai', 'batal'],
             default: 'selesai',
         },
+        // Pembayaran. Transaksi lama (sebelum field ini ada) terbaca sebagai cash + paid.
+        paymentMethod: {
+            type: String,
+            enum: ['cash', 'qris'],
+            default: 'cash',
+        },
+        paymentStatus: {
+            type: String,
+            enum: ['pending', 'paid', 'expired', 'failed'],
+            // Tunai langsung lunas; QRIS menunggu webhook Midtrans.
+            default() {
+                return this.paymentMethod === 'qris' ? 'pending' : 'paid';
+            },
+        },
+        // order_id yang dikirim ke Midtrans (khusus QRIS).
+        gatewayRef: String,
+        qrString: String,
+        expiresAt: Date,
+        paidAt: Date,
+        // Diisi webhook jika uang masuk tapi transaksi tidak bisa diselesaikan normal
+        // (mis. stok kurang / sudah dibatalkan) -> uang pelanggan perlu dikembalikan.
+        paymentNote: String,
     },
     {
         timestamps: true,
@@ -70,5 +92,7 @@ const transactionSchema = new mongoose.Schema(
 
 transactionSchema.index({ createdAt: -1 });
 transactionSchema.index({ kasir: 1, createdAt: -1 });
+// Webhook mencari transaksi berdasarkan order_id; sparse agar transaksi tunai tidak ikut diindeks.
+transactionSchema.index({ gatewayRef: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Transaction', transactionSchema);

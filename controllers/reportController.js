@@ -99,6 +99,8 @@ const getSummary = async (req, res) => {
 
         const filterTransaksi = {
             status: 'selesai',
+            // QRIS yang belum lunas tidak dihitung; transaksi lama tanpa field ini tetap ikut.
+            paymentStatus: { $nin: ['pending', 'expired', 'failed'] },
             ...(Object.keys(dateFilter).length > 0 && {
                 createdAt: dateFilter
             })
@@ -166,6 +168,8 @@ const getRevenue = async (req, res) => {
 
         const filterTransaksi = {
             status: 'selesai',
+            // QRIS yang belum lunas tidak dihitung; transaksi lama tanpa field ini tetap ikut.
+            paymentStatus: { $nin: ['pending', 'expired', 'failed'] },
             ...(Object.keys(dateFilter).length > 0 && {
                 createdAt: dateFilter
             })
@@ -234,6 +238,8 @@ const getTopProducts = async (req, res) => {
 
         const filterTransaksi = {
             status: 'selesai',
+            // QRIS yang belum lunas tidak dihitung; transaksi lama tanpa field ini tetap ikut.
+            paymentStatus: { $nin: ['pending', 'expired', 'failed'] },
             ...(Object.keys(dateFilter).length > 0 && {
                 createdAt: dateFilter
             })
@@ -313,6 +319,8 @@ const sendReportToOwner = async (req, res) => {
 
         const filterTransaksi = {
             status: 'selesai',
+            // QRIS yang belum lunas tidak dihitung; transaksi lama tanpa field ini tetap ikut.
+            paymentStatus: { $nin: ['pending', 'expired', 'failed'] },
             ...(Object.keys(dateFilter).length > 0 && {
                 createdAt: dateFilter
             })

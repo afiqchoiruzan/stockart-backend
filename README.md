@@ -192,6 +192,10 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
    MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/stockart?retryWrites=true&w=majority
    JWT_SECRET=rahasia-kunci-jwt-anda-yang-sangat-panjang-dan-acak
    CORS_ORIGIN=http://localhost:3000
+
+   # Pembayaran QRIS - HANYA sandbox (lihat QRIS_PAYMENT.md)
+   MIDTRANS_SERVER_KEY=SB-Mid-server-xxxxxxxx
+   MIDTRANS_BASE_URL=https://api.sandbox.midtrans.com
    ```
 
 4. **Inisialisasi Data Default (Seeding):**
@@ -268,9 +272,15 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 | | `GET` | `/api/transactions` | Kasir / Pemilik | Riwayat transaksi (filter tanggal WIB, status, kasir) |
 | | `GET` | `/api/transactions/:id` | Kasir / Pemilik | Detail struk transaksi lengkap |
 | | `PATCH` | `/api/transactions/:id/void` | Kasir / Pemilik | Pembatalan transaksi & pengembalian stok barang |
+| | `GET` | `/api/transactions/:id/status` | Kasir / Pemilik | Status pembayaran untuk polling QRIS (hanya membaca) |
+| **Pembayaran** | `POST` | `/api/payments/qris` | Kasir / Pemilik | Buat transaksi QRIS pending + QR dinamis Midtrans (sandbox) |
+| | `POST` | `/api/payments/webhook` | Midtrans (signature) | Notifikasi Midtrans; satu-satunya jalan status menjadi *paid* |
 | **Laporan** | `GET` | `/api/reports/summary` | Pemilik | Ringkasan total omzet, transaksi, dan produk |
 | | `GET` | `/api/reports/revenue` | Pemilik | Data pendapatan per tanggal WIB untuk grafik tren (`?interval=jam` untuk per jam) |
 | | `GET` | `/api/reports/top-products` | Pemilik | 5 produk terlaris berdasarkan kuantitas & omzet |
+
+> 💳 **Pembayaran QRIS:** panduan env, ngrok, Notification URL, checklist uji, dan daftar perubahan untuk production
+> ada di [`QRIS_PAYMENT.md`](./QRIS_PAYMENT.md).
 
 > 💡 **File Pengujian Postman:**  
 > File koleksi lengkap telah disediakan pada berkas [`StockArt_API.postman_collection.json`](./StockArt_API.postman_collection.json). Koleksi ini telah dilengkapi dengan skrip *pre-request* dan *tests* otomatis untuk menyimpan dan meneruskan token JWT ke setiap request.
