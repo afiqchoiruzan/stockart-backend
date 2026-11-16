@@ -26,7 +26,7 @@ function generateReportPdfBuffer({ periodeLabel, summary, topProducts }) {
 
   // Header Title (White text)
   lines.push('1 1 1 rg');
-  lines.push('BT /F2 16 Tf 55 772 Td (LAPORAN KEUANGAN & PENJUALAN - STOCKART POS) Tj ET');
+  lines.push('BT /F2 16 Tf 55 772 Td (LAPORAN KEUANGAN & PENJUALAN - STOCKART) Tj ET');
   lines.push(`BT /F1 10 Tf 55 752 Td (Toko Kelontong "Berkah"  |  Periode: ${esc(periodeLabel)}) Tj ET`);
 
   // KPI Boxes Background (#FFEAD3 -> RGB 1.0, 0.918, 0.827)
@@ -83,7 +83,7 @@ function generateReportPdfBuffer({ periodeLabel, summary, topProducts }) {
   // Footer
   lines.push('0.45 0.36 0.32 rg');
   const timestamp = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-  lines.push(`BT /F1 9 Tf 40 ${y - 25} Td (Dicetak otomatis oleh sistem StockArt Backend pada ${esc(timestamp)} WIB) Tj ET`);
+  lines.push(`BT /F1 9 Tf 40 ${y - 25} Td (Dicetak otomatis oleh sistem Stockart pada ${esc(timestamp)} WIB) Tj ET`);
 
   const contentStream = lines.join('\n');
   const streamBytes = Buffer.byteLength(contentStream, 'utf8');

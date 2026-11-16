@@ -21,11 +21,11 @@ async function uploadReportToDrive({ fileName, content, ownerEmail, folderName }
   }
 
   const payload = {
-    fileName: fileName || `Laporan_StockArt_${new Date().toISOString().slice(0, 10)}.pdf`,
+    fileName: fileName || `Laporan_Stockart_${new Date().toISOString().slice(0, 10)}.pdf`,
     content,
     mimeType: 'application/pdf',
     ownerEmail: (ownerEmail || process.env.OWNER_EMAIL || '').trim(),
-    folderName: folderName || 'StockArt_Reports',
+    folderName: folderName || 'Stockart_Reports',
   };
 
   const response = await fetch(webhookUrl, {

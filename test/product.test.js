@@ -476,7 +476,7 @@ test('E2E Logika Product Lengkap (CRUD, Filter, Restock, Soft/Hard Delete, Resto
       const subjectMatch = mime.match(/Subject: =\?UTF-8\?B\?([A-Za-z0-9+/=]+)\?=/);
       strictAssert.ok(subjectMatch, 'Header Subject MIME harus ter-encode Base64 UTF-8');
       const decodedSubject = Buffer.from(subjectMatch[1], 'base64').toString('utf8');
-      strictAssert.match(decodedSubject, /^\[StockArt Kritis\]/);
+      strictAssert.match(decodedSubject, /^\[Stockart Kritis\]/);
       strictAssert.equal(/[\p{Extended_Pictographic}\u2600-\u27BF]/u.test(decodedSubject), false);
 
       const parts = mime.split('\r\n\r\n');

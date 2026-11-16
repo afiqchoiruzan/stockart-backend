@@ -49,7 +49,7 @@ function isEmailConfigured() {
  */
 async function sendEmailViaBrevo({ apiKey, senderEmail, recipients, subject, html, attachment }) {
   const payload = {
-    sender: { name: 'StockArt POS System', email: senderEmail },
+    sender: { name: 'Stockart', email: senderEmail },
     to: recipients.map((email) => ({ email })),
     subject,
     htmlContent: html,
@@ -216,14 +216,14 @@ function sendEmail({ to, subject, html, attachment }) {
 
           let message;
           if (attachment && attachment.contentBuffer) {
-            const boundary = `----=_StockArtBoundary_${Date.now()}`;
+            const boundary = `----=_StockartBoundary_${Date.now()}`;
             const attachBase64 = Buffer.from(attachment.contentBuffer)
               .toString('base64')
               .replace(/(.{76})/g, '$1\r\n');
             const mimeType = attachment.contentType || 'application/pdf';
 
             message = [
-              `From: "StockArt POS System" <${smtpUser}>`,
+              `From: "Stockart" <${smtpUser}>`,
               `To: ${toHeader}`,
               `Subject: ${encodedSubject}`,
               'MIME-Version: 1.0',
@@ -247,7 +247,7 @@ function sendEmail({ to, subject, html, attachment }) {
             ].join('\r\n');
           } else {
             message = [
-              `From: "StockArt POS System" <${smtpUser}>`,
+              `From: "Stockart" <${smtpUser}>`,
               `To: ${toHeader}`,
               `Subject: ${encodedSubject}`,
               'MIME-Version: 1.0',
@@ -328,70 +328,44 @@ function buildLowStockEmailSubject(products, now = new Date(), options = {}) {
   if (context === 'digest') {
     const freqLabel = getDigestFrequencyLabel(frequency);
     if (habisCount > 0) {
-      return `[StockArt Rekap ${freqLabel}] ${habisCount} Produk Habis & ${menipisCount} Menipis Perlu Restock — ${dateStr}`;
+      return `[Stockart Rekap ${freqLabel}] ${habisCount} Produk Habis & ${menipisCount} Menipis Perlu Restock — ${dateStr}`;
     }
-    return `[StockArt Rekap ${freqLabel}] ${items.length} Produk Stok Menipis Perlu Restock — ${dateStr}`;
+    return `[Stockart Rekap ${freqLabel}] ${items.length} Produk Stok Menipis Perlu Restock — ${dateStr}`;
   }
 
   if (context === 'critical') {
     const firstName = items[0]?.nama || 'Produk';
     if (items.length <= 1) {
-      return `[StockArt Kritis] Stok Habis: ${firstName} — ${dateStr}`;
+      return `[Stockart Kritis] Stok Habis: ${firstName} — ${dateStr}`;
     }
-    return `[StockArt Kritis] Stok Habis: ${firstName} (+${items.length - 1} Produk Lainnya) — ${dateStr}`;
+    return `[Stockart Kritis] Stok Habis: ${firstName} (+${items.length - 1} Produk Lainnya) — ${dateStr}`;
   }
 
   if (habisCount > 0) {
-    return `[StockArt Kritis] ${habisCount} Produk Habis & ${menipisCount} Menipis Perlu Restock — ${dateStr}`;
+    return `[Stockart Kritis] ${habisCount} Produk Habis & ${menipisCount} Menipis Perlu Restock — ${dateStr}`;
   }
-  return `[StockArt Alert] ${items.length} Produk Stok Menipis Perlu Restock — ${dateStr}`;
+  return `[Stockart Alert] ${items.length} Produk Stok Menipis Perlu Restock — ${dateStr}`;
 }
 
 /**
- * Membangun Visual Header HTML (Monokrom + Aksen Merah khusus status low stock, tanpa emoji).
+ * Membangun Visual Header HTML (Monokrom tanpa emoji, dengan judul Stockart di paling atas).
  */
 function buildLowStockEmailHeader(
   products,
-  { wibDateTime, isCritical, habisCount, menipisCount, context, frequency }
+  { wibDateTime, context, frequency }
 ) {
-  const badgeText = isCritical
-    ? 'STATUS: STOK HABIS (KRITIS)'
-    : 'STATUS: STOK MENIPIS';
-
-  const totalAffected = Number(habisCount || 0) + Number(menipisCount || 0);
-  const badgeStyle = totalAffected > 0
-    ? 'background:#FEF2F2; color:#991B1B; border:1px solid #DC2626;'
-    : 'background:#F5F5F5; color:#171717; border:1px solid #D4D4D4;';
-
   const freqLabel = getDigestFrequencyLabel(frequency);
-  let eyebrowText = 'STOCKART POS &middot; INVENTORY ALERT';
   let titleText = 'Peringatan Stok Produk Menipis';
 
   if (context === 'digest') {
-    eyebrowText = `STOCKART POS &middot; REKAP ${freqLabel.toUpperCase()}`;
     titleText = `Rekap ${freqLabel} Stok Produk Menipis`;
   } else if (context === 'critical') {
-    eyebrowText = 'STOCKART POS &middot; PERINGATAN STOK HABIS';
     titleText = 'Peringatan Kritis: Stok Produk Habis (0)';
   }
 
   return `
     <div style="background:#FFFFFF; border-top:4px solid #000000; border-bottom:1px solid #E5E5E5; padding:24px 24px 20px;">
-      <table role="presentation" style="width:100%; border-collapse:collapse; margin-bottom:12px;">
-        <tr>
-          <td style="vertical-align:middle;">
-            <span style="font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#525252;">
-              ${eyebrowText}
-            </span>
-          </td>
-          <td style="text-align:right; vertical-align:middle;">
-            <span style="display:inline-block; font-size:11px; font-weight:700; letter-spacing:0.04em; padding:4px 10px; border-radius:4px; ${badgeStyle}">
-              ${badgeText}
-            </span>
-          </td>
-        </tr>
-      </table>
-      <div style="font-size:12px; font-weight:700; color:#000000; margin-bottom:4px;">
+      <div style="font-size:15px; font-weight:700; color:#000000; letter-spacing:-0.01em; margin:0 0 6px;">
         Stockart
       </div>
       <h1 style="margin:0 0 6px; font-size:22px; font-weight:700; color:#000000; letter-spacing:-0.02em; line-height:1.25;">
@@ -480,18 +454,18 @@ function buildLowStockEmailBody(products, { to, wibDateTime, context, frequency 
   const recipientLabel = to || process.env.OWNER_EMAIL;
   const freqLabel = getDigestFrequencyLabel(frequency).toLowerCase();
 
-  let introText = `Berikut ringkasan produk aktif pada katalog <strong>StockArt POS</strong> yang perlu segera diperhatikan pada pengecekan <strong>${wibDateTime}</strong>:`;
-  let footerText = `Notifikasi dikirim otomatis oleh server <strong style="color:#171717;">StockArt Backend</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> saat pengecekan stok dilakukan.`;
+  let introText = `Berikut ringkasan produk aktif pada katalog <strong>Stockart</strong> yang perlu segera diperhatikan pada pengecekan <strong>${wibDateTime}</strong>:`;
+  let footerText = `Notifikasi dikirim otomatis oleh server <strong style="color:#171717;">Stockart</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> saat pengecekan stok dilakukan.`;
 
   if (context === 'digest') {
-    introText = `Berikut rekap ${freqLabel} seluruh produk aktif pada katalog <strong>StockArt POS</strong> dengan stok di bawah atau sama dengan batas minimum pada <strong>${wibDateTime}</strong>:`;
-    footerText = `Notifikasi rekap ${freqLabel} dikirim otomatis oleh server <strong style="color:#171717;">StockArt Backend</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> sesuai jadwal alert stok yang aktif.`;
+    introText = `Berikut rekap ${freqLabel} seluruh produk aktif pada katalog <strong>Stockart</strong> dengan stok di bawah atau sama dengan batas minimum pada <strong>${wibDateTime}</strong>:`;
+    footerText = `Notifikasi rekap ${freqLabel} dikirim otomatis oleh server <strong style="color:#171717;">Stockart</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> sesuai jadwal alert stok yang aktif.`;
   } else if (context === 'critical') {
     introText = `Produk berikut baru saja menyentuh <strong>stok 0 (habis)</strong> setelah transaksi kasir pada <strong>${wibDateTime}</strong> dan perlu segera di-restock:`;
-    footerText = `Notifikasi kritis dikirim otomatis oleh server <strong style="color:#171717;">StockArt Backend</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> karena transaksi kasir membuat stok produk mencapai 0.`;
+    footerText = `Notifikasi kritis dikirim otomatis oleh server <strong style="color:#171717;">Stockart</strong> ke <strong style="color:#171717;">${recipientLabel}</strong> karena transaksi kasir membuat stok produk mencapai 0.`;
   } else if (context === 'manual') {
-    introText = `Berikut rekap produk aktif pada katalog <strong>StockArt POS</strong> yang perlu segera di-restock berdasarkan pengecekan manual pada <strong>${wibDateTime}</strong>:`;
-    footerText = `Notifikasi dikirim secara manual melalui dashboard <strong style="color:#171717;">StockArt POS</strong> ke <strong style="color:#171717;">${recipientLabel}</strong>.`;
+    introText = `Berikut rekap produk aktif pada katalog <strong>Stockart</strong> yang perlu segera di-restock berdasarkan pengecekan manual pada <strong>${wibDateTime}</strong>:`;
+    footerText = `Notifikasi dikirim secara manual melalui dashboard <strong style="color:#171717;">Stockart</strong> ke <strong style="color:#171717;">${recipientLabel}</strong>.`;
   }
 
   return `
@@ -579,7 +553,7 @@ async function sendLowStockAlertEmail(products, customRecipient, options = {}) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Peringatan Stok Menipis StockArt</title>
+  <title>Peringatan Stok Menipis Stockart</title>
 </head>
 <body style="margin:0; padding:20px 12px; background:#F5F5F5; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width:680px; margin:0 auto; background:#FFFFFF; border:1px solid #D4D4D4; border-radius:6px; overflow:hidden;">
@@ -623,17 +597,17 @@ function buildReportHtml({ periodeLabel, summary, topProducts, to, driveInfo }) 
       <div style="margin-top:16px; padding:12px 16px; background:#E5F5F6; border:1px solid #9BD4D8; border-radius:8px; font-size:13px; color:#2B6F75;">
         <strong>☁️ Tersimpan Otomatis di Google Drive Owner:</strong><br/>
         • File Laporan: <a href="${driveInfo.fileUrl}" style="color:#D46743; font-weight:bold;">${driveInfo.fileName}</a><br/>
-        • Folder Drive: <a href="${driveInfo.folderUrl}" style="color:#2B6F75; font-weight:bold;">Buka Folder StockArt_Reports</a>
+        • Folder Drive: <a href="${driveInfo.folderUrl}" style="color:#2B6F75; font-weight:bold;">Buka Folder Stockart_Reports</a>
       </div>`
       : '';
 
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Laporan StockArt</title></head>
+<head><meta charset="UTF-8"><title>Laporan Stockart</title></head>
 <body style="margin:0; padding:16px; background:#FFFFFF;">
   <div style="font-family:Segoe UI, Arial, sans-serif; max-width:640px; margin:0 auto; border:1px solid #EDD5BC; border-radius:12px; overflow:hidden;">
     <div style="background:linear-gradient(135deg, #D46743, #E89B5B); color:#FFFFFF; padding:20px 24px;">
-      <h2 style="margin:0; font-size:19px;">📊 Laporan Keuangan & Penjualan — StockArt POS</h2>
+      <h2 style="margin:0; font-size:19px;">📊 Laporan Keuangan & Penjualan — Stockart</h2>
       <p style="margin:4px 0 0; font-size:12px; opacity:0.95;">Toko Kelontong "Berkah" • Periode: ${periodeLabel}</p>
     </div>
     <div style="padding:20px 24px; background:#FFF7EE; color:#2A1E17;">
@@ -669,7 +643,7 @@ function buildReportHtml({ periodeLabel, summary, topProducts, to, driveInfo }) 
 
       <p style="font-size:12px; color:#755E52; margin-top:16px; margin-bottom:0;">
         📎 <strong>File PDF Laporan</strong> telah dilampirkan pada email ini.<br/>
-        Dikirim otomatis oleh layanan <strong>StockArt Backend</strong> (${process.env.SMTP_USER}) ke Email Owner (${to || process.env.OWNER_EMAIL}).
+        Dikirim otomatis oleh layanan <strong>Stockart</strong> (${process.env.SMTP_USER}) ke Email Owner (${to || process.env.OWNER_EMAIL}).
       </p>
     </div>
   </div>
@@ -688,10 +662,10 @@ async function sendReportEmail({ periodeLabel, summary, topProducts, to, driveIn
 
   return sendEmail({
     to,
-    subject: `📊 [StockArt Report] Laporan Keuangan & Inventaris (${periodeLabel})`,
+    subject: `📊 [Stockart Report] Laporan Keuangan & Inventaris (${periodeLabel})`,
     html,
     attachment: {
-      filename: `Laporan_StockArt_${safeDate}.pdf`,
+      filename: `Laporan_Stockart_${safeDate}.pdf`,
       contentBuffer: finalPdfBuffer,
       contentType: 'application/pdf',
     },
