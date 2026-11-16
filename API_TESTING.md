@@ -61,14 +61,21 @@ TOKEN="isi_token_dari_response_login"
 
 Catatan role:
 
-- `GET /api/products` bisa diakses `pemilik` dan `kasir`
+- `GET /api/products` dan `GET /api/products/barcode/:code` bisa diakses `pemilik` dan `kasir`
 - `POST`, `PUT`, dan `DELETE /api/products` hanya bisa diakses `pemilik`
 
 ### Create Product
 
 Jangan kirim `kodeProduk` untuk menggunakan kode otomatis berformat `PRD-<UUID>`.
-Setiap request membuat produk baru dengan kode berbeda. Kode manual/barcode tetap
+Setiap request membuat produk baru dengan kode berbeda. Kode manual tetap
 bisa dikirim, tetapi harus unik. `_id` juga dibuat otomatis oleh MongoDB.
+
+Field `barcode` (barcode fisik pada kemasan, mis. EAN-13) terpisah dari `kodeProduk`:
+
+- Opsional. Jika diisi: teks 4–48 karakter tanpa spasi, dan harus unik.
+- Produk tanpa barcode boleh banyak (index unik *sparse*). `""` atau `null` dianggap tanpa barcode.
+- Pada `PUT`, kirim `"barcode": ""` untuk menghapus barcode produk.
+- Barcode duplikat ditolak `400` dengan pesan `"Barcode sudah digunakan oleh produk lain"`.
 
 ```bash
 curl -X POST http://localhost:5000/api/products \
@@ -107,6 +114,68 @@ curl -X GET http://localhost:5000/api/products/$PRODUCT_ID \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhYTlmMWYyYzQxZGI3NzhjZmZkODgxYyIsImlhdCI6MTc4OTUyOTQyOSwiZXhwIjoxNzg5NjE1ODI5fQ.eFTg3XkgDCoqSDC59LyAYzUIgD73EVoua72yylPyjY8"
 ```
 
+### Get Product By Barcode (Scan)
+
+Lookup satu produk dari hasil scan barcode (kamera atau scanner USB). Kode di-*trim*
+lalu dicocokkan *exact* ke `barcode` **atau** `kodeProduk` (produk lama tanpa barcode
+tetap bisa ditemukan lewat kode produknya). Jika kode cocok dengan `barcode` satu produk
+dan `kodeProduk` produk lain, produk dengan `barcode` yang diutamakan.
+
+- `kasir`: hanya produk aktif, tanpa `hargaBeli`.
+- `pemilik`: termasuk produk nonaktif, `hargaBeli` ikut tampil.
+- Tidak ditemukan → `404`; tanpa token → `401`.
+- Encode kode dengan `encodeURIComponent` bila bisa mengandung karakter khusus (mis. `/`).
+- Pasang barcode dulu lewat **Update Product** (contoh di bawah) sebelum mencoba lookup.
+
+```bash
+curl -X GET http://localhost:5000/api/products/barcode/8991234567890 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Contoh response `200` (token kasir, tanpa `hargaBeli`):
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "6a3c1f0e9b1d2c0012ab34cd",
+    "nama": "Buku Tulis",
+    "kodeProduk": "PRD-3F2A9C1E-7B4D-4E8A-9C21-5D6F7A8B9C0D",
+    "barcode": "8991234567890",
+    "kategori": "Alat Tulis",
+    "hargaJual": 4500,
+    "stok": 55,
+    "satuan": "pcs",
+    "stokMinimum": 5,
+    "deskripsi": "Buku tulis ukuran sedang",
+    "aktif": true,
+    "stokHabisNotifiedAt": null,
+    "createdAt": "2026-11-16T03:00:00.000Z",
+    "updatedAt": "2026-11-16T03:00:00.000Z",
+    "__v": 0
+  }
+}
+```
+
+Contoh response `404`:
+
+```json
+{
+  "success": false,
+  "message": "Produk dengan barcode ini belum terdaftar"
+}
+```
+
+### Filter Products by Barcode
+
+Sama seperti lookup, tetapi mengembalikan array (kosong jika tidak ada) dan bisa
+digabung dengan `search`, `kategori`, dan `aktif`.
+
+```bash
+curl -X GET "http://localhost:5000/api/products?barcode=8991234567890" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
 ### Update Product
 
 ```bash
@@ -116,7 +185,8 @@ curl -X PUT http://localhost:5000/api/products/$PRODUCT_ID \
   -d '{
     "nama": "Pulpen Hitam Premium",
     "hargaJual": 4000,
-    "stok": 75
+    "stok": 75,
+    "barcode": "8991234567890"
   }'
 ```
 
@@ -293,6 +363,7 @@ File Postman Collection v2.1 telah disediakan di root proyek:
 3. Buka request `1. Auth > Login Pemilik` atau `Login Kasir`, lalu klik **Send**.
 4. Token JWT akan otomatis tersimpan ke variabel environment Postman dan siap digunakan untuk seluruh endpoint lainnya.
 5. Jalankan `Create Product (Pemilik Only)` tanpa field `kodeProduk`. Request ini bisa diulang tanpa mengubah body; `_id` hasilnya otomatis disimpan sebagai `product_id` untuk request berikutnya. Import ulang koleksi jika masih menggunakan versi lama dengan kode tetap.
+6. Jalankan `Update Product (Pemilik Only)` untuk memasang barcode dari variabel `{{barcode}}` (default `8991234567890`), lalu `Get Product by Barcode (Scan)` untuk mencoba lookup. Ulangi dengan `Login Kasir` untuk memastikan `hargaBeli` tidak tampil.
 
 ---
 

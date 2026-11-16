@@ -250,6 +250,86 @@ test('PUT /api/products/:id — pemilik BISA update produk (200)', async () => {
   assert.equal(body.data.nama, 'Produk Test HTTP (Updated)');
 });
 
+// ─── Barcode Tests ───────────────────────────────────────────────────────────
+
+const TEST_BARCODE = `TESTBC${Date.now()}`;
+
+test('PUT /api/products/:id — pemilik BISA memasang barcode (200)', async () => {
+  assert.ok(createdProductId);
+  const { status, body } = await req(
+    baseUrl,
+    'PUT',
+    `/api/products/${createdProductId}`,
+    { token: tokenPemilik, body: { barcode: TEST_BARCODE } }
+  );
+  assert.equal(status, 200, JSON.stringify(body));
+  assert.equal(body.data.barcode, TEST_BARCODE);
+});
+
+test('GET /api/products/barcode/:code — tanpa token ditolak (401)', async () => {
+  const { status } = await req(baseUrl, 'GET', `/api/products/barcode/${TEST_BARCODE}`);
+  assert.equal(status, 401);
+});
+
+test('GET /api/products/barcode/:code — kasir dapat menemukan produk tanpa hargaBeli (200)', async () => {
+  const { status, body } = await req(
+    baseUrl,
+    'GET',
+    `/api/products/barcode/${TEST_BARCODE}`,
+    { token: tokenKasir }
+  );
+  assert.equal(status, 200, JSON.stringify(body));
+  assert.equal(body.success, true);
+  assert.equal(body.data._id, createdProductId);
+  assert.equal(body.data.hargaBeli, undefined, 'kasir tidak boleh melihat hargaBeli');
+});
+
+test('GET /api/products/barcode/:code — pemilik melihat hargaBeli (200)', async () => {
+  const { status, body } = await req(
+    baseUrl,
+    'GET',
+    `/api/products/barcode/${TEST_BARCODE}`,
+    { token: tokenPemilik }
+  );
+  assert.equal(status, 200, JSON.stringify(body));
+  assert.equal(body.data.hargaBeli, 10000);
+});
+
+test('GET /api/products/barcode/:code — kode tidak terdaftar (404)', async () => {
+  const { status, body } = await req(
+    baseUrl,
+    'GET',
+    `/api/products/barcode/TIDAKADA${Date.now()}`,
+    { token: tokenKasir }
+  );
+  assert.equal(status, 404);
+  assert.equal(body.message, 'Produk dengan barcode ini belum terdaftar');
+});
+
+test('GET /api/products?barcode= — kasir dapat memfilter dengan barcode (200)', async () => {
+  const { status, body } = await req(
+    baseUrl,
+    'GET',
+    `/api/products?barcode=${TEST_BARCODE}`,
+    { token: tokenKasir }
+  );
+  assert.equal(status, 200);
+  assert.deepEqual(body.data.map((p) => p._id), [createdProductId]);
+  assert.equal(body.data[0].hargaBeli, undefined);
+});
+
+test('PUT /api/products/:id — barcode kosong menghapus barcode (200)', async () => {
+  assert.ok(createdProductId);
+  const { status, body } = await req(
+    baseUrl,
+    'PUT',
+    `/api/products/${createdProductId}`,
+    { token: tokenPemilik, body: { barcode: '' } }
+  );
+  assert.equal(status, 200, JSON.stringify(body));
+  assert.equal(body.data.barcode, undefined);
+});
+
 // ─── Transaction Tests ───────────────────────────────────────────────────────
 
 test('POST /api/transactions/draft — kasir dapat menghitung draft (200)', async () => {

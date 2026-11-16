@@ -30,7 +30,7 @@ https://documenter.getpostman.com/view/42234832/2sBYB4M79y
 
 Repositori ini berfokus pada **StockArt Backend**, yaitu fondasi server penyedia layanan **RESTful API** yang aman, tangguh, dan terukur. Layanan backend ini bertanggung jawab atas:
 - **Autentikasi & Otorisasi Pengguna:** Pengelolaan sesi stateless berbasis JSON Web Token (JWT) yang diperkuat dengan *Role-Based Access Control* (RBAC) antara peran `pemilik` dan `kasir`. Registrasi kasir baru wajib diotorisasi oleh pemilik untuk mencegah pendaftaran liar.
-- **Katalog & Manajemen Stok Terintegrasi:** CRUD produk, pelacakan stok masuk (*restock*), peringatan dini stok menipis (*low-stock warning*), pencarian fleksibel nama/kategori/barcode scanner, serta dukungan *soft delete* untuk menjaga integritas data masa lalu.
+- **Katalog & Manajemen Stok Terintegrasi:** CRUD produk, pelacakan stok masuk (*restock*), peringatan dini stok menipis (*low-stock warning*), pencarian fleksibel nama/kategori/barcode scanner (field `barcode` opsional & unik, lookup scan via `GET /api/products/barcode/:code`), serta dukungan *soft delete* untuk menjaga integritas data masa lalu.
 - **Pemrosesan Transaksi Atomik:** Pencatatan struk belanja, snapshot harga produk saat transaksi, kalkulasi subtotal, pemotongan stok otomatis secara atomik (*ACID transaction session* di MongoDB), serta pembatalan transaksi (*void*) yang aman dan mengembalikan stok secara terkontrol.
 - **Analisis & Laporan Bisnis:** Agregasi omzet harian, ringkasan performa penjualan berdasarkan rentang tanggal, dan peringkat produk terlaris (*top products*) untuk membantu pemilik toko mengambil keputusan strategis.
 
@@ -221,9 +221,10 @@ Ikuti langkah-langkah di bawah ini untuk menjalankan server backend StockArt di 
 | **Auth** | `POST` | `/api/auth/login` | Publik | Login pengguna & mendapatkan token JWT |
 | | `POST` | `/api/auth/register` | Pemilik | Pendaftaran akun kasir baru (diproteksi) |
 | | `GET` | `/api/auth/me` | Kasir / Pemilik | Mendapatkan profil akun yang sedang login |
-| **Produk** | `GET` | `/api/products` | Kasir / Pemilik | Katalog produk aktif (dukung search, kategori, barcode) |
+| **Produk** | `GET` | `/api/products` | Kasir / Pemilik | Katalog produk aktif (dukung search, kategori, `?barcode=` exact ke `barcode` atau `kodeProduk`) |
 | | `GET` | `/api/products/low-stock` | Kasir / Pemilik | Daftar produk dengan stok di bawah batas minimum |
 | | `POST` | `/api/products/low-stock/notify` | Pemilik | Kirim rekap email low-stock secara manual ke email pemilik |
+| | `GET` | `/api/products/barcode/:code` | Kasir / Pemilik | Lookup produk hasil scan (exact `barcode` atau `kodeProduk`); kasir hanya produk aktif tanpa `hargaBeli`, 404 jika belum terdaftar |
 | | `GET` | `/api/products/:id` | Kasir / Pemilik | Detail produk berdasarkan ID |
 | | `POST` | `/api/products` | Pemilik | Menambahkan produk baru |
 | | `PUT` | `/api/products/:id` | Pemilik | Memperbarui informasi produk |
