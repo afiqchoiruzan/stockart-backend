@@ -5,6 +5,7 @@ const Product = require('../models/Product');
 const StockEntry = require('../models/StockEntry');
 const { buildReportHtml, sendReportEmail } = require('./emailService');
 const { uploadReportToDrive } = require('./driveService');
+const { generateReportPdfBuffer } = require('./pdfService');
 
 // Seluruh laporan dihitung dalam zona waktu toko (WIB, UTC+7),
 // sama seperti filter tanggal pada riwayat transaksi.
@@ -196,6 +197,116 @@ function buildPeriodeLabel({ tanggalMulai, tanggalAkhir } = {}) {
     : 'Semua Periode (Hingga Hari Ini)';
 }
 
+const WEEKDAY_SHORT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+const MAX_CHART_DAYS = 31;
+
+/** "YYYY-MM-DD" + n hari -> "YYYY-MM-DD". */
+function shiftDateKey(dateKey, days) {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetween(startKey, endKey) {
+  return Math.round(
+    (new Date(`${endKey}T00:00:00Z`) - new Date(`${startKey}T00:00:00Z`)) / SATU_HARI_MS
+  );
+}
+
+/**
+ * Data grafik omzet untuk PDF laporan:
+ * - rentang 1 hari  -> omzet per jam WIB (jam pertama s/d terakhir yang ada transaksi)
+ * - rentang > 1 hari -> omzet per tanggal WIB, setiap hari tampil (maks. 31 hari terakhir)
+ */
+async function buildRevenueChart(range = {}) {
+  const { tanggalMulai, tanggalAkhir } = range;
+
+  if (tanggalMulai && tanggalAkhir && tanggalMulai === tanggalAkhir) {
+    const series = await getRevenueSeries(range, 'jam');
+    if (series.length === 0) {
+      return { title: 'Omzet per Jam', points: [] };
+    }
+    const byHour = new Map(series.map((item) => [Number(item.jam), item]));
+    const hours = Array.from(byHour.keys());
+    const points = [];
+    for (let hour = Math.min(...hours); hour <= Math.max(...hours); hour += 1) {
+      points.push({
+        label: String(hour).padStart(2, '0'),
+        omzet: Number(byHour.get(hour)?.omzet || 0),
+      });
+    }
+    return { title: 'Omzet per Jam', points };
+  }
+
+  const series = await getRevenueSeries(range, 'hari');
+  const byDate = new Map(series.map((item) => [item.tanggal, item]));
+
+  let dateKeys;
+  let note;
+  if (tanggalMulai && tanggalAkhir) {
+    const totalDays = daysBetween(tanggalMulai, tanggalAkhir) + 1;
+    const start =
+      totalDays > MAX_CHART_DAYS ? shiftDateKey(tanggalAkhir, -(MAX_CHART_DAYS - 1)) : tanggalMulai;
+    if (totalDays > MAX_CHART_DAYS) note = `Grafik menampilkan ${MAX_CHART_DAYS} hari terakhir.`;
+    dateKeys = Array.from(
+      { length: daysBetween(start, tanggalAkhir) + 1 },
+      (_, i) => shiftDateKey(start, i)
+    );
+  } else {
+    dateKeys = series.map((item) => item.tanggal).slice(-MAX_CHART_DAYS);
+    if (series.length > MAX_CHART_DAYS) note = `Grafik menampilkan ${MAX_CHART_DAYS} hari terakhir.`;
+  }
+
+  const isShort = dateKeys.length <= 7;
+  const points = dateKeys.map((dateKey) => {
+    const day = Number(dateKey.slice(8, 10));
+    const month = Number(dateKey.slice(5, 7));
+    const weekday = WEEKDAY_SHORT[new Date(`${dateKey}T00:00:00Z`).getUTCDay()];
+    return {
+      label: isShort ? weekday : String(day),
+      sublabel: isShort ? `${day}/${month}` : undefined,
+      omzet: Number(byDate.get(dateKey)?.omzet || 0),
+    };
+  });
+
+  return { title: 'Omzet per Hari', points, note };
+}
+
+/**
+ * Mengumpulkan seluruh data laporan (ringkasan, produk terlaris, grafik omzet)
+ * untuk email, PDF, dan unduhan.
+ */
+async function buildReportData(range = {}) {
+  // Validasi rentang lebih dulu agar kesalahan input langsung ditolak (400)
+  buildDateFilter(range.tanggalMulai, range.tanggalAkhir);
+
+  const [summary, topProducts, chart] = await Promise.all([
+    getReportSummary(range, { activeOnly: true }),
+    getTopProducts(range),
+    buildRevenueChart(range),
+  ]);
+
+  return {
+    periodeLabel: buildPeriodeLabel(range),
+    summary,
+    topProducts,
+    chart,
+  };
+}
+
+/**
+ * Membuat file PDF laporan (sama dengan lampiran email) untuk diunduh dari halaman Laporan.
+ */
+async function buildReportPdf({ tanggalMulai, tanggalAkhir } = {}) {
+  const data = await buildReportData({ tanggalMulai, tanggalAkhir });
+  const buffer = generateReportPdfBuffer(data);
+  const suffix =
+    tanggalMulai || tanggalAkhir
+      ? `${tanggalMulai || 'awal'}_${tanggalAkhir || 'sekarang'}`
+      : 'semua-periode';
+  return { buffer, fileName: `Laporan_Stockart_${suffix}.pdf` };
+}
+
 /**
  * Menyusun laporan lalu mengirimkannya ke email owner.
  * Salinan PDF diunggah ke Google Drive bila saveToDrive aktif dan GDRIVE_WEBHOOK_URL diatur.
@@ -209,16 +320,11 @@ async function sendReport({
   context = 'manual',
   frequency,
 } = {}) {
-  const range = { tanggalMulai, tanggalAkhir };
-  // Validasi rentang lebih dulu agar kesalahan input langsung ditolak (400)
-  buildDateFilter(tanggalMulai, tanggalAkhir);
+  const { periodeLabel, summary, topProducts, chart } = await buildReportData({
+    tanggalMulai,
+    tanggalAkhir,
+  });
 
-  const [summary, topProducts] = await Promise.all([
-    getReportSummary(range, { activeOnly: true }),
-    getTopProducts(range),
-  ]);
-
-  const periodeLabel = buildPeriodeLabel(range);
   const htmlContent = buildReportHtml({
     periodeLabel,
     summary,
@@ -244,6 +350,7 @@ async function sendReport({
     topProducts,
     to: email,
     driveInfo,
+    chart,
     context,
     frequency,
   });
@@ -266,5 +373,8 @@ module.exports = {
   getRevenueSeries,
   getTopProducts,
   buildPeriodeLabel,
+  buildRevenueChart,
+  buildReportData,
+  buildReportPdf,
   sendReport,
 };

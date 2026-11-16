@@ -3,6 +3,7 @@ const {
     getReportSummary,
     getRevenueSeries,
     getTopProducts: getTopProductsReport,
+    buildReportPdf,
     sendReport
 } = require('../services/reportService');
 
@@ -123,9 +124,41 @@ const sendReportToOwner = async (req, res) => {
     }
 };
 
+// GET /api/reports/pdf — unduh PDF laporan (sama dengan lampiran email)
+const downloadReportPdf = async (req, res) => {
+    try {
+        const { tanggalMulai, tanggalAkhir } = req.query;
+
+        const { buffer, fileName } = await buildReportPdf({
+            tanggalMulai,
+            tanggalAkhir
+        });
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="${fileName}"`
+        );
+        res.setHeader('Content-Length', buffer.length);
+        res.status(200).send(buffer);
+
+    } catch (error) {
+        const statusCode = error.statusCode || 500;
+
+        res.status(statusCode).json({
+            success: false,
+            message:
+                statusCode === 400
+                    ? error.message
+                    : 'Gagal membuat PDF laporan'
+        });
+    }
+};
+
 module.exports = {
     getSummary,
     getRevenue,
     getTopProducts,
-    sendReportToOwner
+    sendReportToOwner,
+    downloadReportPdf
 };

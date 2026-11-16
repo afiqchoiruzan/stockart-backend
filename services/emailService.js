@@ -303,6 +303,28 @@ function formatShortWibDate(date = new Date()) {
 
 const formatRp = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
 
+const LOCAL_ORIGIN_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i;
+
+/**
+ * URL frontend untuk tautan di email (tombol Buka Halaman Laporan / Manajemen Produk).
+ * Urutan: FRONTEND_URL bila diatur, lalu origin CORS_ORIGIN pertama yang bukan localhost
+ * (di production CORS_ORIGIN sering juga berisi localhost untuk development),
+ * terakhir fallback http://localhost:3000.
+ */
+function getFrontendBaseUrl(env = process.env) {
+  const explicit = String(env.FRONTEND_URL || '').trim();
+  const origins = String(env.CORS_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const base =
+    explicit ||
+    origins.find((origin) => !LOCAL_ORIGIN_REGEX.test(origin)) ||
+    origins[0] ||
+    'http://localhost:3000';
+  return base.replace(/\/+$/, '');
+}
+
 const DIGEST_FREQUENCY_LABELS = {
   daily: 'Harian',
   weekly: 'Mingguan',
@@ -387,10 +409,7 @@ function buildLowStockEmailBody(products, { to, wibDateTime, context, frequency 
   // Urutkan item dari stok terkecil (stok 0 paling atas)
   items.sort((a, b) => Number(a.stok || 0) - Number(b.stok || 0));
 
-  const frontendBase = (process.env.CORS_ORIGIN || 'http://localhost:3000')
-    .split(',')[0]
-    .trim()
-    .replace(/\/+$/, '');
+  const frontendBase = getFrontendBaseUrl();
   const dashboardUrl = `${frontendBase}/owner/produk`;
 
   const tableRows = items
@@ -623,10 +642,7 @@ function buildReportHtml({
       : 'Laporan Penjualan & Stok';
   const recipientLabel = to || process.env.OWNER_EMAIL;
 
-  const frontendBase = (process.env.CORS_ORIGIN || 'http://localhost:3000')
-    .split(',')[0]
-    .trim()
-    .replace(/\/+$/, '');
+  const frontendBase = getFrontendBaseUrl();
   const reportUrl = `${frontendBase}/owner/laporan`;
 
   const formatUnit = (n) => Number(n || 0).toLocaleString('id-ID');
@@ -786,6 +802,7 @@ async function sendReportEmail({
   to,
   driveInfo,
   pdfBuffer,
+  chart,
   context,
   frequency,
 }) {
@@ -799,7 +816,8 @@ async function sendReportEmail({
     frequency,
   });
   const finalPdfBuffer =
-    pdfBuffer || generateReportPdfBuffer({ periodeLabel, summary, topProducts });
+    pdfBuffer ||
+    generateReportPdfBuffer({ periodeLabel, summary, topProducts, chart, context, frequency });
   const safeDate = new Date().toISOString().slice(0, 10);
 
   return sendEmail({
@@ -823,5 +841,6 @@ module.exports = {
   buildLowStockEmailBody,
   buildReportHtml,
   buildReportEmailSubject,
+  getFrontendBaseUrl,
   sendReportEmail,
 };
