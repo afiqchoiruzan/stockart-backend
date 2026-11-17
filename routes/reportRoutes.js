@@ -9,6 +9,7 @@ const {
 } = require('../controllers/reportController');
 
 const { protect, authorize } = require('../middleware/authMiddleware');
+const { validate, manualEmailRules } = require('../middleware/validate');
 
 const router = express.Router();
 
@@ -17,6 +18,6 @@ router.get('/summary', protect, authorize('pemilik'), getSummary);
 router.get('/revenue', protect, authorize('pemilik'), getRevenue);
 router.get('/top-products', protect, authorize('pemilik'), getTopProducts);
 router.get('/pdf', protect, authorize('pemilik'), downloadReportPdf);
-router.post('/send-email', protect, authorize('pemilik'), sendReportToOwner);
+router.post('/send-email', protect, authorize('pemilik'), validate(manualEmailRules), sendReportToOwner);
 
 module.exports = router;

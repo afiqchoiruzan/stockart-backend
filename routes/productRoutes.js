@@ -15,12 +15,18 @@ const {
 } = require('../controllers/productController');
 
 const { protect, authorize } = require('../middleware/authMiddleware');
-const { validate, productRules, productUpdateRules, restockRules } = require('../middleware/validate');
+const {
+  validate,
+  productRules,
+  productUpdateRules,
+  restockRules,
+  manualEmailRules,
+} = require('../middleware/validate');
 
 // Owner dan cashier dapat melihat produk
 router.get('/', protect, getProducts);
 router.get('/low-stock', protect, getLowStockProducts);
-router.post('/low-stock/notify', protect, authorize('pemilik'), notifyLowStockProducts);
+router.post('/low-stock/notify', protect, authorize('pemilik'), validate(manualEmailRules), notifyLowStockProducts);
 // Harus sebelum '/:id' agar "barcode" tidak dianggap sebagai id produk
 router.get('/barcode/:code', protect, getProductByBarcode);
 router.get('/:id', protect, getProductById);

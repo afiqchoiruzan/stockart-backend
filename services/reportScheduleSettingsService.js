@@ -3,13 +3,18 @@
 const NotificationSetting = require('../models/NotificationSetting');
 const { getNextOccurrence } = require('./lowStockSchedule');
 const { validateSettingsPayload } = require('./lowStockSettingsService');
-const { isEmailConfigured } = require('./emailService');
+const {
+  isEmailConfigured,
+  getDefaultRecipientLabel,
+  maskEmailRecipients,
+  validateOptionalEmailRecipients,
+} = require('./emailService');
 
 // Pengaturan kirim laporan otomatis disimpan sebagai dokumen singleton terpisah
 // di koleksi NotificationSetting, memakai field jadwal yang sama dengan digest low stock.
 const REPORT_SETTINGS_KEY = 'reportAutoSend';
 const REPORT_SCHEDULE_FIELDS = ['digestFrequency', 'digestTime', 'digestWeekday', 'digestDayOfMonth'];
-const REPORT_ALLOWED_FIELDS = [...REPORT_SCHEDULE_FIELDS, 'saveToDrive'];
+const REPORT_ALLOWED_FIELDS = [...REPORT_SCHEDULE_FIELDS, 'saveToDrive', 'recipientEmail'];
 
 // Default aman: nonaktif sampai owner mengaktifkannya dari halaman Laporan
 const REPORT_DEFAULT_SETTINGS = {
@@ -68,6 +73,15 @@ function validateReportSettingsPayload(payload) {
       errors.push('saveToDrive harus berupa boolean (true/false)');
     } else {
       updates.saveToDrive = payload.saveToDrive;
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'recipientEmail')) {
+    const check = validateOptionalEmailRecipients(payload.recipientEmail);
+    if (!check.valid) {
+      errors.push(check.message);
+    } else {
+      updates.recipientEmail = check.normalized || null;
     }
   }
 
@@ -149,11 +163,18 @@ async function updateReportScheduleSettings(
  */
 function formatReportSettingsResponse(
   doc,
-  { now = new Date(), emailConfigured = isEmailConfigured(), driveConfigured = isDriveConfigured() } = {}
+  {
+    now = new Date(),
+    emailConfigured = isEmailConfigured(),
+    driveConfigured = isDriveConfigured(),
+    defaultRecipient = getDefaultRecipientLabel(),
+  } = {}
 ) {
   const nextRun = getNextOccurrence(doc, now);
   const configured = Boolean(emailConfigured);
   const staleUnconfigured = configured && doc.lastDigestStatus === 'email_not_configured';
+  const customRecipient = String(doc.recipientEmail || '').trim();
+  const effectiveRecipient = customRecipient || defaultRecipient;
 
   return {
     digestFrequency: doc.digestFrequency,
@@ -170,6 +191,8 @@ function formatReportSettingsResponse(
     digestAttempts: doc.digestAttempts ?? 0,
     emailConfigured: configured,
     driveConfigured: Boolean(driveConfigured),
+    maskedRecipient: maskEmailRecipients(effectiveRecipient),
+    isCustomRecipient: Boolean(customRecipient),
   };
 }
 

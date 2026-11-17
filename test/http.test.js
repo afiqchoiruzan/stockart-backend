@@ -490,6 +490,24 @@ test('GET /api/reports/top-products — pemilik BISA akses laporan top products 
   assert.ok(Array.isArray(body.data));
 });
 
+test('POST /api/reports/send-email & /api/products/low-stock/notify — email invalid ditolak (400)', async () => {
+  const reportRes = await req(baseUrl, 'POST', '/api/reports/send-email', {
+    token: tokenPemilik,
+    body: { email: 'bukan-email' },
+  });
+  assert.equal(reportRes.status, 400);
+  assert.equal(reportRes.body.success, false);
+  assert.ok(Array.isArray(reportRes.body.errors) && reportRes.body.errors.length > 0);
+
+  const notifyRes = await req(baseUrl, 'POST', '/api/products/low-stock/notify', {
+    token: tokenPemilik,
+    body: { email: 'salah@' },
+  });
+  assert.equal(notifyRes.status, 400);
+  assert.equal(notifyRes.body.success, false);
+  assert.ok(Array.isArray(notifyRes.body.errors) && notifyRes.body.errors.length > 0);
+});
+
 // ─── Register RBAC & Validation Tests ────────────────────────────────────────
 
 test('POST /api/auth/register — tanpa token ditolak (401)', async () => {

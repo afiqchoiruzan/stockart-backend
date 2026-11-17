@@ -562,3 +562,43 @@ test('Email laporan: gaya monokrom tanpa emoji, sama seperti email rekap stok', 
   assert.ok(subjectScheduled.startsWith('[Stockart Laporan Mingguan]'));
   assert.ok(!EMOJI_REGEX.test(subjectManual) && !EMOJI_REGEX.test(subjectScheduled));
 });
+
+test('Helper penerima email: getDefaultRecipientLabel, maskEmailRecipients, dan validateOptionalEmailRecipients', () => {
+  const {
+    getDefaultRecipientLabel,
+    maskEmailAddress,
+    maskEmailRecipients,
+    validateOptionalEmailRecipients,
+  } = require('../services/emailService');
+
+  assert.equal(
+    getDefaultRecipientLabel({ OWNER_EMAIL: ' a@toko.id ,  b@toko.id ' }),
+    'a@toko.id, b@toko.id'
+  );
+  assert.equal(getDefaultRecipientLabel({}), '');
+
+  assert.equal(maskEmailAddress('owner@gmail.com'), 'ow***@gmail.com');
+  assert.equal(maskEmailAddress('ab@toko.id'), 'a*@toko.id');
+  assert.equal(maskEmailAddress('x@toko.id'), '*@toko.id');
+  assert.equal(
+    maskEmailRecipients('owner@gmail.com, admin@toko.id'),
+    'ow***@gmail.com, ad***@toko.id'
+  );
+  assert.equal(maskEmailRecipients(''), '');
+
+  assert.deepEqual(validateOptionalEmailRecipients(undefined), { valid: true, normalized: undefined });
+  assert.deepEqual(validateOptionalEmailRecipients('   '), { valid: true, normalized: undefined });
+  assert.deepEqual(validateOptionalEmailRecipients('  akuntan@toko.id '), {
+    valid: true,
+    normalized: 'akuntan@toko.id',
+  });
+  assert.deepEqual(validateOptionalEmailRecipients('a@toko.id, b@toko.id'), {
+    valid: true,
+    normalized: 'a@toko.id, b@toko.id',
+  });
+
+  assert.equal(validateOptionalEmailRecipients('bukan-email').valid, false);
+  assert.equal(validateOptionalEmailRecipients('a@toko.id, salah').valid, false);
+  assert.equal(validateOptionalEmailRecipients('a@toko.id\r\nBcc: x@evil.com').valid, false);
+  assert.equal(validateOptionalEmailRecipients(123).valid, false);
+});

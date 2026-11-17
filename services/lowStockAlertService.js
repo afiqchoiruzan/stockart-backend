@@ -52,7 +52,9 @@ async function triggerCriticalOutOfStockAlerts(
   }
 
   try {
-    await send(claimedProducts, undefined, { context: 'critical' });
+    await send(claimedProducts, settings.recipientEmail || undefined, {
+      context: 'critical',
+    });
     return {
       sent: true,
       count: claimedProducts.length,
