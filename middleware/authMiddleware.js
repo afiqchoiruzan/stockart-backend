@@ -25,6 +25,10 @@ const protect = async (req, res, next) => {
         return res.status(401).json({ message: 'User tidak ditemukan' });
       }
 
+      if (req.user.aktif === false) {
+        return res.status(401).json({ message: 'Akun Anda telah dinonaktifkan oleh pemilik toko' });
+      }
+
       // Khusus kasir: hanya izinkan 1 perangkat aktif & tolak token yang sudah logout
       if (
         req.user.role === 'kasir' &&
