@@ -563,11 +563,56 @@ test('GET & DELETE /api/auth/cashiers — RBAC & kelola akun kasir oleh pemilik'
   assert.ok(listRes.body.data.some((u) => u._id === tempKasirId && u.username === tempUsername));
   assert.equal(listRes.body.data.every((u) => u.role === 'kasir' && u.password === undefined), true);
 
-  // Kasir tidak bisa menghapus akun kasir (403)
+  // Kasir tidak bisa mengubah/menghapus akun kasir (403)
+  const kasirPatchRes = await req(baseUrl, 'PATCH', `/api/auth/cashiers/${tempKasirId}`, {
+    token: tokenKasir,
+    body: { nama: 'Hacker' },
+  });
+  assert.equal(kasirPatchRes.status, 403);
+
   const kasirDelRes = await req(baseUrl, 'DELETE', `/api/auth/cashiers/${tempKasirId}`, {
     token: tokenKasir,
   });
   assert.equal(kasirDelRes.status, 403);
+
+  // Pemilik bisa edit nama, username, password kasir
+  const updatedUsername = `kasir_ed_${String(Date.now()).slice(-6)}`;
+  const patchRes = await req(baseUrl, 'PATCH', `/api/auth/cashiers/${tempKasirId}`, {
+    token: tokenPemilik,
+    body: { nama: 'Kasir Diedit', username: updatedUsername, password: 'newPassword123' },
+  });
+  assert.equal(patchRes.status, 200, JSON.stringify(patchRes.body));
+  assert.equal(patchRes.body.data.nama, 'Kasir Diedit');
+  assert.equal(patchRes.body.data.username, updatedUsername);
+  assert.equal(patchRes.body.data.aktif, true);
+
+  // Nonaktifkan kasir -> tidak bisa login (403) dan token lama ditolak (401)
+  const loginBeforeDeactivate = await login(baseUrl, updatedUsername, 'newPassword123');
+  const deactivateRes = await req(baseUrl, 'PATCH', `/api/auth/cashiers/${tempKasirId}`, {
+    token: tokenPemilik,
+    body: { aktif: false },
+  });
+  assert.equal(deactivateRes.status, 200);
+  assert.equal(deactivateRes.body.data.aktif, false);
+
+  const loginWhileInactive = await req(baseUrl, 'POST', '/api/auth/login', {
+    body: { username: updatedUsername, password: 'newPassword123' },
+  });
+  assert.equal(loginWhileInactive.status, 403);
+
+  const meWhileInactive = await req(baseUrl, 'GET', '/api/auth/me', {
+    token: loginBeforeDeactivate,
+  });
+  assert.equal(meWhileInactive.status, 401);
+
+  // Aktifkan kembali -> bisa login lagi dengan password baru
+  const reactivateRes = await req(baseUrl, 'PATCH', `/api/auth/cashiers/${tempKasirId}`, {
+    token: tokenPemilik,
+    body: { aktif: true },
+  });
+  assert.equal(reactivateRes.status, 200);
+  assert.equal(reactivateRes.body.data.aktif, true);
+  await login(baseUrl, updatedUsername, 'newPassword123');
 
   // Pemilik tidak bisa menghapus akun pemilik lewat endpoint ini (403)
   const ownerMeRes = await req(baseUrl, 'GET', '/api/auth/me', { token: tokenPemilik });

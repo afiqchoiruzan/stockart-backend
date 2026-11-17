@@ -90,6 +90,13 @@ exports.loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Username atau password salah' });
     }
 
+    if (user.aktif === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Akun Anda telah dinonaktifkan. Hubungi pemilik toko.'
+      });
+    }
+
     // 3. Khusus kasir: perbarui activeSessionId agar sesi di perangkat lama otomatis gugur
     let sessionId = null;
     if (user.role === 'kasir') {
@@ -159,9 +166,97 @@ exports.logoutUser = async (req, res) => {
 exports.getCashiers = async (req, res) => {
   try {
     const cashiers = await User.find({ role: 'kasir' })
-      .select('_id nama username role createdAt')
+      .select('_id nama username role aktif createdAt')
       .sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data: cashiers });
+    const data = cashiers.map((u) => ({
+      _id: u._id,
+      nama: u.nama,
+      username: u.username,
+      role: u.role,
+      aktif: u.aktif !== false,
+      createdAt: u.createdAt,
+    }));
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Perbarui data, password, atau status aktif kasir (khusus pemilik)
+// @route   PATCH /api/auth/cashiers/:id
+exports.updateCashier = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'ID kasir tidak valid' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Akun kasir tidak ditemukan' });
+    }
+    if (user.role !== 'kasir') {
+      return res.status(403).json({ success: false, message: 'Hanya akun dengan role kasir yang dapat diubah' });
+    }
+
+    const { nama, username, password, aktif } = req.body || {};
+
+    if (nama !== undefined) {
+      const cleanNama = String(nama).trim();
+      if (!cleanNama) {
+        return res.status(400).json({ success: false, message: 'Nama kasir tidak boleh kosong' });
+      }
+      user.nama = cleanNama;
+    }
+
+    if (username !== undefined) {
+      const cleanUsername = String(username).trim().toLowerCase();
+      if (!/^[a-zA-Z0-9_]{3,30}$/.test(cleanUsername)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Username harus 3-30 karakter dan hanya boleh huruf, angka, atau underscore (_)',
+        });
+      }
+      const duplicate = await User.findOne({ username: cleanUsername, _id: { $ne: id } });
+      if (duplicate) {
+        return res.status(400).json({ success: false, message: 'Username sudah digunakan' });
+      }
+      user.username = cleanUsername;
+    }
+
+    if (password !== undefined && password !== '') {
+      const cleanPass = String(password);
+      if (cleanPass.length < 8) {
+        return res.status(400).json({ success: false, message: 'Password minimal 8 karakter' });
+      }
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(cleanPass, salt);
+      user.activeSessionId = null;
+    }
+
+    if (aktif !== undefined) {
+      if (typeof aktif !== 'boolean') {
+        return res.status(400).json({ success: false, message: 'Status aktif harus berupa boolean' });
+      }
+      user.aktif = aktif;
+      if (!aktif) {
+        user.activeSessionId = null;
+      }
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Data akun kasir berhasil diperbarui',
+      data: {
+        _id: user._id,
+        nama: user.nama,
+        username: user.username,
+        role: user.role,
+        aktif: user.aktif !== false,
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
