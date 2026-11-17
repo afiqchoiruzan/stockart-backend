@@ -538,6 +538,58 @@ test('POST /api/auth/register — pemilik BISA daftarkan kasir baru (201)', asyn
   await User.findByIdAndDelete(body.data._id);
 });
 
+test('GET & DELETE /api/auth/cashiers — RBAC & kelola akun kasir oleh pemilik', async () => {
+  // Kasir ditolak (403)
+  const kasirListRes = await req(baseUrl, 'GET', '/api/auth/cashiers', {
+    token: tokenKasir,
+  });
+  assert.equal(kasirListRes.status, 403);
+
+  // Buat kasir baru untuk diuji
+  const tempUsername = `kasir_kelola_${Date.now()}`;
+  const { status: regStatus, body: regBody } = await req(baseUrl, 'POST', '/api/auth/register', {
+    token: tokenPemilik,
+    body: { nama: 'Kasir Sementara', username: tempUsername, password: 'password123' },
+  });
+  assert.equal(regStatus, 201);
+  const tempKasirId = regBody.data._id;
+
+  // Pemilik bisa melihat daftar kasir
+  const listRes = await req(baseUrl, 'GET', '/api/auth/cashiers', {
+    token: tokenPemilik,
+  });
+  assert.equal(listRes.status, 200);
+  assert.equal(listRes.body.success, true);
+  assert.ok(listRes.body.data.some((u) => u._id === tempKasirId && u.username === tempUsername));
+  assert.equal(listRes.body.data.every((u) => u.role === 'kasir' && u.password === undefined), true);
+
+  // Kasir tidak bisa menghapus akun kasir (403)
+  const kasirDelRes = await req(baseUrl, 'DELETE', `/api/auth/cashiers/${tempKasirId}`, {
+    token: tokenKasir,
+  });
+  assert.equal(kasirDelRes.status, 403);
+
+  // Pemilik tidak bisa menghapus akun pemilik lewat endpoint ini (403)
+  const ownerMeRes = await req(baseUrl, 'GET', '/api/auth/me', { token: tokenPemilik });
+  const delOwnerRes = await req(baseUrl, 'DELETE', `/api/auth/cashiers/${ownerMeRes.body.data._id}`, {
+    token: tokenPemilik,
+  });
+  assert.equal(delOwnerRes.status, 403);
+
+  // Pemilik bisa menghapus akun kasir (200)
+  const delRes = await req(baseUrl, 'DELETE', `/api/auth/cashiers/${tempKasirId}`, {
+    token: tokenPemilik,
+  });
+  assert.equal(delRes.status, 200, JSON.stringify(delRes.body));
+  assert.equal(delRes.body.success, true);
+
+  // Verifikasi akun kasir sudah hilang (404 jika dihapus lagi)
+  const delAgainRes = await req(baseUrl, 'DELETE', `/api/auth/cashiers/${tempKasirId}`, {
+    token: tokenPemilik,
+  });
+  assert.equal(delAgainRes.status, 404);
+});
+
 test('POST /api/auth/register — password kurang dari 8 karakter ditolak (400)', async () => {
   const { status, body } = await req(baseUrl, 'POST', '/api/auth/register', {
     token: tokenPemilik,
