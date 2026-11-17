@@ -28,6 +28,9 @@ https://stockart-backend-production-5896718b.up.railway.app
 
 6. Tautan Documenter Postman:
 https://documenter.getpostman.com/view/42234832/2sBYB4M79y
+
+7. Tautan Video Presentasi (Google Drive):
+https://drive.google.com/drive/folders/1Ath5WSGdlr-lRYSO6i36MprdxjWcDUcn?usp=sharing
 ---
 
 ## 1. Deskripsi Aplikasi
@@ -35,10 +38,16 @@ https://documenter.getpostman.com/view/42234832/2sBYB4M79y
 **StockArt** adalah aplikasi kasir (*Point of Sale* / POS) dan manajemen inventaris modern berbasis web yang dirancang khusus untuk memodernisasi operasional harian **Toko Kelontong "Berkah"**. Aplikasi ini menyelesaikan permasalahan pencatatan manual, ketidaksesuaian stok barang dagangan, risiko *human-error* saat kalkulasi kasir, serta ketiadaan analisis omzet penjualan secara berkala.
 
 Repositori ini berfokus pada **StockArt Backend**, yaitu fondasi server penyedia layanan **RESTful API** yang aman, tangguh, dan terukur. Layanan backend ini bertanggung jawab atas:
-- **Autentikasi & Otorisasi Pengguna:** Pengelolaan sesi berbasis JSON Web Token (JWT, kedaluwarsa **8 jam**) dengan *Role-Based Access Control* (RBAC) antara peran `pemilik` dan `kasir`, pembatasan **1 perangkat aktif** untuk akun kasir, serta endpoint logout & proteksi IDOR.
+- **Autentikasi, RBAC, & Kelola Akun Kasir:** Pengelolaan sesi berbasis JSON Web Token (JWT, kedaluwarsa **8 jam**) dengan *Role-Based Access Control* (RBAC) antara peran `pemilik` dan `kasir`, pembatasan **1 perangkat aktif** untuk akun kasir, endpoint **Kelola Kasir oleh Owner** (`GET/PATCH/DELETE /api/auth/cashiers` untuk tambah, edit username/password, *soft-deactivate* `aktif: false` agar riwayat lama tetap utuh, & hapus), serta proteksi IDOR.
 - **Katalog & Manajemen Stok Terintegrasi:** CRUD produk, pelacakan stok masuk (*restock* via `StockEntry`), peringatan dini stok menipis (*low-stock alert* kritis & jadwal *digest* WIB via Brevo HTTP API / SMTP), pencarian fleksibel nama/kategori/barcode scanner (`GET /api/products/barcode/:code`), serta *soft delete* & *restore*.
 - **Pemrosesan Transaksi Atomik & QRIS:** Pencatatan struk belanja, snapshot harga produk saat transaksi, pemotongan stok atomik (*ACID transaction session* di MongoDB), pembayaran **Tunai** dan **QRIS dinamis (Midtrans Sandbox + Webhook)**, pembatasan riwayat kasir hanya untuk hari ini (WIB), serta pembatalan (*void*) transaksi yang aman.
 - **Analisis & Laporan Bisnis:** Agregasi omzet harian, ringkasan performa penjualan berdasarkan rentang tanggal, peringkat produk terlaris (*top products*), pembuatan laporan **PDF**, serta pengiriman laporan otomatis terjadwal ke email pemilik.
+
+### Poin Nilai Tambah
+- **Penyimpanan Berkas di Google Drive:** Pengarsipan laporan penjualan PDF ke Google Drive melalui integrasi webhook (`services/driveService.js` & `GDRIVE_WEBHOOK_URL`).
+- **Pengiriman Email Otomatis:** Alert stok menipis (*digest* terjadwal WIB & *one-time critical alert* stok = 0) serta pengiriman laporan penjualan PDF otomatis melalui **Brevo HTTP API** (fallback SMTP), mendukung multi-penerima.
+- **Payment Gateway:** Pembayaran **QRIS Dinamis** terintegrasi **Midtrans Core API (Sandbox)** beserta verifikasi signature webhook dan pemotongan stok atomik saat *settlement*.
+- **Deployment Selain Vercel:** Server backend & *scheduler* di-deploy di **Railway Cloud** (`https://stockart-backend-production-5896718b.up.railway.app`) dengan **MongoDB Atlas (Replica Set)**, sedangkan frontend di **Vercel** (`https://stockartweb.vercel.app`).
 
 ---
 
