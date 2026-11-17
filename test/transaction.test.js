@@ -186,11 +186,19 @@ test('alur HTTP transaksi dengan MongoDB replica set', async (t) => {
         detailBarang: [{ produk: p._id, jumlah: 1, hargaSatuan: 1000, subtotal: 1000 }] });
       ids.push(String(tx._id));
     }
-    // Pemilik dapat memfilter riwayat transaksi lintas kasir (role kasir dibatasi hanya miliknya sejak auth-security)
+    // Pemilik dapat memfilter riwayat transaksi lintas kasir & tanggal (kasir dikunci ke hari ini WIB)
     const response = await request('GET', `/transactions?tanggal=2026-09-29&kasir=${owner._id}&status=selesai`, undefined, ownerToken);
     assert.equal(response.status, 200);
     assert.deepEqual(response.data.map((tx) => tx._id), [ids[2], ids[1]]);
-    assert.equal((await request('GET', '/transactions?tanggal=2026-02-30', undefined, token)).status, 400);
+    assert.equal((await request('GET', '/transactions?tanggal=2026-02-30', undefined, ownerToken)).status, 400);
+
+    // Kasir tidak bisa melihat transaksi tanggal lampau meski mengirim query ?tanggal=
+    await Transaction.create({ kasir: kasir._id, totalHarga: 1000, createdAt: new Date('2026-09-29T05:00:00.000Z'),
+      detailBarang: [{ produk: p._id, jumlah: 1, hargaSatuan: 1000, subtotal: 1000 }] });
+    const kasirPastRes = await request('GET', '/transactions?tanggal=2026-09-29', undefined, token);
+    assert.equal(kasirPastRes.status, 200);
+    assert.equal(kasirPastRes.data.some((tx) => String(tx.createdAt).startsWith('2026-09-29')), false);
+
     assert.equal((await request('GET', '/transactions/bad', undefined, token)).status, 400);
     assert.equal((await voidTx(objectId())).status, 404);
   });

@@ -14,13 +14,19 @@
 1. Tautan Laporan PDF (Google Drive):
 https://drive.google.com/drive/folders/1q-CFouyNM72jy04lbFyb3o5WhMakrGxF?usp=sharing
 
-2. Tautan Repositori GitHub:
+2. Tautan Repositori GitHub Backend:
 https://github.com/AfiqMir/stockart-backend
 
-3. Tautan Live Server Deployment (Railway):
+3. Tautan Repositori GitHub Frontend:
+https://github.com/afiqchoiruzan/stockart-frontend
+
+4. Tautan Live Web Frontend (Vercel):
+https://stockartweb.vercel.app
+
+5. Tautan Live Server Backend (Railway):
 https://stockart-backend-production-5896718b.up.railway.app
 
-4. Tautan Documenter Postman
+6. Tautan Documenter Postman:
 https://documenter.getpostman.com/view/42234832/2sBYB4M79y
 ---
 
@@ -29,10 +35,10 @@ https://documenter.getpostman.com/view/42234832/2sBYB4M79y
 **StockArt** adalah aplikasi kasir (*Point of Sale* / POS) dan manajemen inventaris modern berbasis web yang dirancang khusus untuk memodernisasi operasional harian **Toko Kelontong "Berkah"**. Aplikasi ini menyelesaikan permasalahan pencatatan manual, ketidaksesuaian stok barang dagangan, risiko *human-error* saat kalkulasi kasir, serta ketiadaan analisis omzet penjualan secara berkala.
 
 Repositori ini berfokus pada **StockArt Backend**, yaitu fondasi server penyedia layanan **RESTful API** yang aman, tangguh, dan terukur. Layanan backend ini bertanggung jawab atas:
-- **Autentikasi & Otorisasi Pengguna:** Pengelolaan sesi stateless berbasis JSON Web Token (JWT) yang diperkuat dengan *Role-Based Access Control* (RBAC) antara peran `pemilik` dan `kasir`. Registrasi kasir baru wajib diotorisasi oleh pemilik untuk mencegah pendaftaran liar.
-- **Katalog & Manajemen Stok Terintegrasi:** CRUD produk, pelacakan stok masuk (*restock*), peringatan dini stok menipis (*low-stock warning*), pencarian fleksibel nama/kategori/barcode scanner (field `barcode` opsional & unik, lookup scan via `GET /api/products/barcode/:code`), serta dukungan *soft delete* untuk menjaga integritas data masa lalu.
-- **Pemrosesan Transaksi Atomik:** Pencatatan struk belanja, snapshot harga produk saat transaksi, kalkulasi subtotal, pemotongan stok otomatis secara atomik (*ACID transaction session* di MongoDB), serta pembatalan transaksi (*void*) yang aman dan mengembalikan stok secara terkontrol.
-- **Analisis & Laporan Bisnis:** Agregasi omzet harian, ringkasan performa penjualan berdasarkan rentang tanggal, dan peringkat produk terlaris (*top products*) untuk membantu pemilik toko mengambil keputusan strategis.
+- **Autentikasi & Otorisasi Pengguna:** Pengelolaan sesi berbasis JSON Web Token (JWT, kedaluwarsa **8 jam**) dengan *Role-Based Access Control* (RBAC) antara peran `pemilik` dan `kasir`, pembatasan **1 perangkat aktif** untuk akun kasir, serta endpoint logout & proteksi IDOR.
+- **Katalog & Manajemen Stok Terintegrasi:** CRUD produk, pelacakan stok masuk (*restock* via `StockEntry`), peringatan dini stok menipis (*low-stock alert* kritis & jadwal *digest* WIB via Brevo HTTP API / SMTP), pencarian fleksibel nama/kategori/barcode scanner (`GET /api/products/barcode/:code`), serta *soft delete* & *restore*.
+- **Pemrosesan Transaksi Atomik & QRIS:** Pencatatan struk belanja, snapshot harga produk saat transaksi, pemotongan stok atomik (*ACID transaction session* di MongoDB), pembayaran **Tunai** dan **QRIS dinamis (Midtrans Sandbox + Webhook)**, pembatasan riwayat kasir hanya untuk hari ini (WIB), serta pembatalan (*void*) transaksi yang aman.
+- **Analisis & Laporan Bisnis:** Agregasi omzet harian, ringkasan performa penjualan berdasarkan rentang tanggal, peringkat produk terlaris (*top products*), pembuatan laporan **PDF**, serta pengiriman laporan otomatis terjadwal ke email pemilik.
 
 ---
 
@@ -56,53 +62,68 @@ Berikut adalah diagram pohon (*ASCII directory tree*) struktur direktori backend
 ```text
 stockart-backend/
 ├── config/
-│   └── db.js                    # Konfigurasi koneksi database MongoDB Atlas via Mongoose
+│   ├── db.js                       # Konfigurasi koneksi database MongoDB Atlas via Mongoose
+│   └── midtrans.js                 # Konfigurasi Midtrans Core API Sandbox & verifikasi signature key
 ├── controllers/
-│   ├── authController.js         # Logika login, registrasi kasir terotorisasi, dan get current user profile
-│   ├── notificationController.js # Handler pengaturan jadwal notifikasi low stock (GET/PUT settings)
-│   ├── productController.js      # Logika CRUD produk, restock, low-stock, trigger manual alert, dan soft-delete
-│   ├── reportController.js       # Pipeline agregasi laporan omzet harian, summary, dan produk terlaris
-│   └── transactionController.js  # Handler checkout transaksi, alert kritis stok habis, riwayat, dan void struk
+│   ├── authController.js           # Login, logout, single-device session kasir, registrasi kasir, & /me
+│   ├── notificationController.js   # Handler pengaturan jadwal notifikasi low-stock & laporan otomatis
+│   ├── paymentController.js        # Handler pembuatan QRIS Midtrans & penerima webhook notifikasi
+│   ├── productController.js        # Logika CRUD produk, restock, low-stock, trigger alert, & soft-delete
+│   ├── reportController.js         # Ringkasan laporan, tren omzet, top products, PDF, & kirim email laporan
+│   └── transactionController.js    # Checkout, polling status QRIS, riwayat (kasir dikunci hari ini), & void
 ├── middleware/
-│   ├── authMiddleware.js         # Middleware verifikasi token JWT (protect) dan hak akses peran (authorize)
-│   ├── rateLimiter.js            # Middleware pencegah serangan brute-force pada endpoint autentikasi
-│   └── validate.js               # Middleware validasi skema dan sanitasi body request sebelum ke controller
+│   ├── authMiddleware.js           # Verifikasi JWT, activeSessionId kasir, & hak akses peran (authorize)
+│   ├── rateLimiter.js              # Middleware pencegah brute-force pada endpoint autentikasi
+│   └── validate.js                 # Middleware validasi skema dan sanitasi body request sebelum ke controller
 ├── models/
-│   ├── NotificationSetting.js    # Mongoose schema jadwal digest low-stock, status eksekusi, dan alert kritis
-│   ├── Product.js                # Mongoose schema produk (stok, harga beli/jual, barcode, status aktif, stokHabisNotifiedAt)
-│   ├── Transaction.js            # Mongoose schema transaksi (daftar item, total, nominal bayar, kembalian, status)
-│   └── User.js                   # Mongoose schema pengguna toko (nama, username, password ter-hash, role)
+│   ├── NotificationSetting.js      # Schema jadwal digest low-stock & pengiriman laporan otomatis
+│   ├── Product.js                  # Schema produk (stok, harga beli/jual, barcode, aktif, stokHabisNotifiedAt)
+│   ├── StockEntry.js               # Schema riwayat penambahan stok (restock) produk
+│   ├── Transaction.js              # Schema transaksi (item, total, paymentMethod, paymentStatus, gatewayRef)
+│   └── User.js                     # Schema pengguna toko (nama, username, password ter-hash, role, activeSessionId)
 ├── routes/
-│   ├── authRoutes.js             # Routing endpoint otentikasi (/api/auth)
-│   ├── notificationRoutes.js     # Routing endpoint pengaturan notifikasi (/api/notifications)
-│   ├── productRoutes.js          # Routing endpoint katalog produk (/api/products)
-│   ├── reportRoutes.js           # Routing endpoint analisis & pelaporan bisnis (/api/reports)
-│   └── transactionRoutes.js      # Routing endpoint kasir & checkout (/api/transactions)
+│   ├── authRoutes.js               # Routing endpoint otentikasi (/api/auth)
+│   ├── notificationRoutes.js       # Routing endpoint pengaturan notifikasi & jadwal laporan (/api/notifications)
+│   ├── paymentRoutes.js            # Routing endpoint QRIS & webhook Midtrans (/api/payments)
+│   ├── productRoutes.js            # Routing endpoint katalog produk (/api/products)
+│   ├── reportRoutes.js             # Routing endpoint analisis & pelaporan bisnis (/api/reports)
+│   └── transactionRoutes.js        # Routing endpoint kasir & checkout (/api/transactions)
 ├── scripts/
-│   ├── generateBarcodeSheet.js   # Buat lembar cetak barcode (HTML, SVG EAN-13/CODE128) untuk demo scan
-│   ├── seed.js                   # Script inisialisasi akun pemilik default (idempotent / aman dijalankan ulang)
-│   ├── seedBarcodes.js           # Isi barcode EAN-13 dummy ("200...") untuk produk tanpa barcode + ekspor CSV
-│   └── seedProducts.js           # Script pengisian 30+ data sampel produk toko kelontong (sembako, dsb.)
+│   ├── generateBarcodeSheet.js     # Buat lembar cetak barcode (HTML, SVG EAN-13/CODE128) untuk demo scan
+│   ├── seed.js                     # Script inisialisasi akun pemilik default (idempotent / aman dijalankan ulang)
+│   ├── seedBarcodes.js             # Isi barcode EAN-13 dummy ("200...") untuk produk tanpa barcode + ekspor CSV
+│   ├── seedProducts.js             # Script pengisian 30+ data sampel produk toko kelontong
+│   └── tryQris.js                  # Utilitas uji cepat konfigurasi QRIS Midtrans Sandbox
 ├── services/
-│   ├── emailService.js           # Layanan pengiriman email (Brevo HTTP API & Nodemailer SMTP) termasuk template digest/kritis
-│   ├── lowStockAlertService.js   # Trigger 1x alert kritis saat checkout membuat stok = 0 & reset flag saat restock/void
-│   ├── lowStockDigestService.js  # Scheduler persistent rekap low-stock terjadwal (atomic lock, catch-up, retry)
-│   ├── lowStockSchedule.js       # Kalkulator slot jadwal WIB UTC+7 (off, daily, weekly, monthly)
-│   ├── lowStockSettingsService.js# Baca, validasi, dan update pengaturan notifikasi di MongoDB
-│   └── transactionService.js     # Business logic transaksi atomik MongoDB session (checkout & void with rollback)
+│   ├── emailService.js             # Pengiriman email (Brevo HTTP API & fallback SMTP) + template digest/kritis/laporan
+│   ├── lowStockAlertService.js     # Trigger 1x alert kritis saat checkout membuat stok = 0 & reset flag saat restock/void
+│   ├── lowStockDigestService.js    # Scheduler persistent rekap low-stock terjadwal (atomic lock, catch-up, retry)
+│   ├── lowStockSchedule.js         # Kalkulator slot jadwal WIB UTC+7 (off, daily, weekly, monthly)
+│   ├── lowStockSettingsService.js  # Baca, validasi, dan update pengaturan notifikasi low-stock di MongoDB
+│   ├── paymentService.js           # Integrasi Midtrans Core API QRIS & verifikasi webhook
+│   ├── pdfService.js               # Generator dokumen laporan penjualan PDF untuk lampiran email
+│   ├── reportScheduleService.js    # Scheduler pengiriman laporan penjualan otomatis
+│   ├── reportScheduleSettingsService.js # Baca, validasi, dan update pengaturan jadwal laporan di MongoDB
+│   ├── reportService.js            # Pipeline agregasi laporan omzet, summary, & produk terlaris
+│   ├── stockEntryService.js        # Pencatatan riwayat stok masuk (StockEntry)
+│   └── transactionService.js       # Business logic transaksi atomik MongoDB session (checkout, QRIS, & void)
 ├── test/
-│   ├── criticalAlert.test.js     # E2E test alert kritis stok = 0, reset flag saat restock/update/void
-│   ├── email.test.js             # Unit test penyusunan subjek & isi email digest, kritis, dan manual
-│   ├── generateBarcodeSheet.test.js # Unit test render SVG (EAN-13/CODE128 fallback) & HTML lembar barcode
-│   ├── http.test.js              # HTTP Integration test endpoint utama (Auth, RBAC, CRUD, Report)
-│   ├── lowStockDigest.test.js    # Test scheduler digest (atomic claim, anti-duplikat restart, retry, skip)
-│   ├── lowStockSchedule.test.js  # Unit test kalkulasi jadwal WIB UTC+7 (daily, weekly, monthly, off)
-│   ├── lowStockSettings.test.js  # Test persistensi & validasi pengaturan notifikasi di MongoDB
-│   ├── notificationRoutes.test.js# HTTP + RBAC test GET/PUT /api/notifications/low-stock/settings
-│   ├── product.test.js           # Integration test controller produk (CRUD, restock, trigger manual low-stock)
-│   ├── rbac.test.js              # Unit test fungsional middleware otorisasi RBAC (pemilik vs kasir)
-│   ├── seedBarcodes.test.js      # Unit test check digit EAN-13, penomoran dummy, rencana idempoten, dan CSV
-│   └── transaction.test.js       # Unit test transaksi atomik, rollback, void, dan pemotongan stok
+│   ├── criticalAlert.test.js       # E2E test alert kritis stok = 0, reset flag saat restock/update/void
+│   ├── email.test.js               # Unit test email Brevo/SMTP, normalisasi AggregateError, & template
+│   ├── generateBarcodeSheet.test.js# Unit test render SVG (EAN-13/CODE128) & HTML lembar barcode
+│   ├── http.test.js                # HTTP Integration test endpoint utama (Auth, RBAC, CRUD, Report)
+│   ├── lowStockDigest.test.js      # Test scheduler digest (atomic claim, anti-duplikat restart, retry, skip)
+│   ├── lowStockSchedule.test.js    # Unit test kalkulasi jadwal WIB UTC+7 (daily, weekly, monthly, off)
+│   ├── lowStockSettings.test.js    # Test persistensi & validasi pengaturan notifikasi di MongoDB
+│   ├── notificationRoutes.test.js  # HTTP + RBAC test GET/PUT /api/notifications/low-stock/settings
+│   ├── payment.test.js             # Unit test layanan pembayaran QRIS & verifikasi signature webhook
+│   ├── paymentHttp.test.js         # HTTP integration test alur QRIS pending -> settlement/expired
+│   ├── product.test.js             # Integration test controller produk (CRUD, restock, trigger manual low-stock)
+│   ├── rbac.test.js                # Unit test fungsional middleware otorisasi RBAC (pemilik vs kasir)
+│   ├── report.test.js              # Test agregasi & endpoint laporan penjualan
+│   ├── reportSchedule.test.js      # Test scheduler pengiriman laporan otomatis
+│   ├── seedBarcodes.test.js        # Unit test check digit EAN-13, penomoran dummy, & CSV
+│   └── transaction.test.js         # Unit test transaksi atomik, rollback, void, & filter kasir hari ini
 ├── .env.example                 # Template variabel lingkungan (Environment Variables)
 ├── .gitignore                   # Daftar file dan direktori yang diabaikan oleh Git
 ├── API_TESTING.md               # Panduan pengujian manual API menggunakan cURL
@@ -130,7 +151,9 @@ Aplikasi backend ini dikembangkan dengan tumpukan teknologi modern yang mengedep
 | **Stateless Authentication** | **JSON Web Token (jsonwebtoken v9)** | Penyedia token akses berjangka waktu (bearer token) untuk memvalidasi identitas pengguna pada setiap request. |
 | **Password Hashing** | **Bcrypt.js (v3)** | Enkripsi satu arah dengan *salt rounds* untuk melindungi kata sandi pengguna di basis data. |
 | **API Security & Limiter** | **Express-Rate-Limit & CORS** | Pembatasan beban request (anti brute-force) serta kontrol kebijakan pembagian sumber daya lintas domain (*Cross-Origin Resource Sharing*). |
-| **Automated Testing** | **Node.js Built-in Test Runner (`node --test`)** | Pengujian unit dan integrasi native tanpa overhead dependensi eksternal, mencakup pengujian RBAC, REST API, dan transaksi atomik. |
+| **Email & Notifikasi** | **Brevo HTTP API & Node TLS SMTP** | Pengiriman email notifikasi stok menipis & laporan PDF melalui HTTPS (port 443) di cloud dengan fallback SMTP Gmail di lokal, mendukung multi-penerima `OWNER_EMAIL`. |
+| **Payment Gateway** | **Midtrans Core API (Sandbox)** | Pembuatan QRIS dinamis beserta verifikasi webhook pembayaran asinkron. |
+| **Automated Testing** | **Node.js Built-in Test Runner (`node --test`)** | Pengujian unit dan integrasi native tanpa overhead dependensi eksternal, mencakup pengujian RBAC, REST API, transaksi atomik, QRIS, dan scheduler. |
 | **Platform Deployment** | **Railway Cloud** | Platform PaaS modern untuk hosting server backend live 24/7 dengan dukungan environment variables terenkripsi. |
 
 ---
