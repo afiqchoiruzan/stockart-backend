@@ -9,12 +9,16 @@ function sendError(res, error) {
     message: status === 500 ? 'Gagal memproses transaksi' : error.message });
 }
 
+function getTodayWibDate() {
+  return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 exports.getTransactions = async (req, res) => {
   try {
-    // Jika pemanggil adalah kasir, kunci filter agar hanya melihat transaksinya sendiri
+    // Jika pemanggil adalah kasir, kunci filter ke akun sendiri dan hanya hari ini (WIB)
     const queryParams =
       req.user?.role === 'kasir'
-        ? { ...req.query, kasir: String(req.user._id) }
+        ? { ...req.query, kasir: String(req.user._id), tanggal: getTodayWibDate() }
         : req.query;
 
     const transactions = await Transaction.find(service.historyFilter(queryParams))
