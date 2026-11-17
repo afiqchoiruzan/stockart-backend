@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -147,6 +148,46 @@ exports.logoutUser = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Logout berhasil',
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Ambil daftar semua akun kasir (khusus pemilik)
+// @route   GET /api/auth/cashiers
+exports.getCashiers = async (req, res) => {
+  try {
+    const cashiers = await User.find({ role: 'kasir' })
+      .select('_id nama username role createdAt')
+      .sort({ createdAt: -1 });
+    res.status(200).json({ success: true, data: cashiers });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Hapus akun kasir berdasarkan ID (khusus pemilik)
+// @route   DELETE /api/auth/cashiers/:id
+exports.deleteCashier = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'ID kasir tidak valid' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Akun kasir tidak ditemukan' });
+    }
+    if (user.role !== 'kasir') {
+      return res.status(403).json({ success: false, message: 'Hanya akun dengan role kasir yang dapat dihapus' });
+    }
+
+    await User.findByIdAndDelete(id);
+    res.status(200).json({
+      success: true,
+      message: `Akun kasir "${user.username}" berhasil dihapus`,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
